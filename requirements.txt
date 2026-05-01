@@ -1,0 +1,18 @@
+# requirements.txt
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+alembic
+pydantic[email]
+pydantic-settings
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+ccxt
+pandas
+numpy
+apscheduler
+redis
+httpx
+python-dotenv
