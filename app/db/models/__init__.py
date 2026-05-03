@@ -8,3 +8,4 @@ from app.db.models.signal import Signal
 from app.db.models.backtest_result import BacktestResult
 from app.db.models.portfolio import Portfolio
 from app.db.models.candle import Candle
+from app.db.models.optimizer_result import OptimizerResult

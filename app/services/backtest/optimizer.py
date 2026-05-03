@@ -47,7 +47,7 @@ def optimize_strategy(
                         "profit_factor": result.get("profit_factor", 0),
                     })
 
-    results.sort(key=lambda x: x["win_rate"], reverse=True)
+    results.sort(key=lambda x: x["total_pnl"], reverse=True)
     return results
 
 
@@ -62,5 +62,5 @@ def optimize_all_strategies(
         results = optimize_strategy(strategy_type, candles, capital, sl_values, tp_values)
         all_results.extend(results)
 
-    all_results.sort(key=lambda x: x["win_rate"], reverse=True)
+    all_results.sort(key=lambda x: x["total_pnl"], reverse=True)
     return all_results
