@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     CLAUDE_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     OLLAMA_MODEL: str = "deepseek-r1"
+    finnhub_api_key: str = ""
 
     class Config:
         env_file = ".env"

@@ -22,6 +22,7 @@ from app.api.routes.dashboard import router as dashboard_router
 from app.core.scheduler import scheduler
 from app.services.bot_runner import bot_cycle
 import logging
+from app.api.routes.calendar import router as calendar_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("trading_bot")
@@ -64,7 +65,7 @@ app.include_router(notifications_router, prefix="/api/notifications", tags=["not
 app.include_router(ai_router, prefix="/api/ai", tags=["ai"])
 app.include_router(bot_router, prefix="/api/bot", tags=["bot"])
 app.include_router(dashboard_router, prefix="/api/dashboard", tags=["dashboard"])
-
+app.include_router(calendar_router, prefix="/api/calendar", tags=["calendar"])
 
 @app.get("/")
 def root():
