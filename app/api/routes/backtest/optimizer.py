@@ -9,6 +9,7 @@ from app.services.backtest.optimizer import optimize_strategy, optimize_all_stra
 from app.services.backtest.data_loader import load_from_db
 from app.services.strategies.builtin import STRATEGY_MAP
 import asyncio
+from functools import partial
 import logging
 
 router = APIRouter()
@@ -83,7 +84,10 @@ async def optimize_single(
     if len(candles) < 50:
         return {"error": f"Pas assez de donnees ({len(candles)} candles, minimum 50). Binance testnet peut etre en panne."}
 
-    results = optimize_strategy(strategy_type, candles, capital)
+    loop = asyncio.get_event_loop()
+    results = await loop.run_in_executor(
+        None, partial(optimize_strategy, strategy_type, candles, capital)
+    )
     for r in results:
         r["timeframe"] = timeframe
     record_id = save_result(db, current_user.id, "single", symbol, timeframe, len(candles), capital, results)
@@ -123,7 +127,10 @@ async def optimize_single_multi_tf(
             if len(candles) < 50:
                 logger.warning(f"Pas assez de candles pour {tf}: {len(candles)}")
                 continue
-            results = optimize_strategy(strategy_type, candles, capital)
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(
+                None, partial(optimize_strategy, strategy_type, candles, capital)
+            )
             for r in results:
                 r["timeframe"] = tf
             all_results.extend(results)
@@ -167,7 +174,10 @@ async def optimize_all(
     if len(candles) < 50:
         return {"error": f"Pas assez de donnees ({len(candles)} candles, minimum 50). Binance testnet peut etre en panne."}
 
-    results = optimize_all_strategies(candles, capital)
+    loop = asyncio.get_event_loop()
+    results = await loop.run_in_executor(
+        None, partial(optimize_all_strategies, candles, capital)
+    )
     for r in results:
         r["timeframe"] = timeframe
     record_id = save_result(db, current_user.id, "all", symbol, timeframe, len(candles), capital, results)
@@ -203,7 +213,10 @@ async def optimize_all_multi_tf(
             if len(candles) < 50:
                 logger.warning(f"Pas assez de candles pour {tf}: {len(candles)}")
                 continue
-            results = optimize_all_strategies(candles, capital)
+            loop = asyncio.get_event_loop()
+            results = await loop.run_in_executor(
+                None, partial(optimize_all_strategies, candles, capital)
+            )
             for r in results:
                 r["timeframe"] = tf
             all_results.extend(results)
