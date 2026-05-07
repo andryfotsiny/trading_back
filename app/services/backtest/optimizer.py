@@ -1,7 +1,17 @@
+import math
+
+def clean_value(v):
+    if isinstance(v, float) and (math.isinf(v) or math.isnan(v)):
+        return 0
+    return v
+
 # app/services/backtest/optimizer.py
 from typing import List, Dict
 from app.services.backtest.engine import BacktestEngine
 from app.services.strategies.builtin import STRATEGY_MAP
+import logging
+
+logger = logging.getLogger("optimizer")
 
 
 def optimize_strategy(
@@ -22,30 +32,33 @@ def optimize_strategy(
             if tp <= sl:
                 continue
             for risk in risk_range:
-                engine = BacktestEngine(
-                    strategy_type=strategy_type,
-                    initial_capital=capital,
-                    risk_per_trade=risk,
-                    stop_loss_pct=sl,
-                    take_profit_pct=tp,
-                )
-                result = engine.run(candles)
-                if result["total_trades"] > 0:
-                    results.append({
-                        "strategy": strategy_type,
-                        "sl_pct": sl,
-                        "tp_pct": tp,
-                        "risk_pct": risk,
-                        "total_trades": result["total_trades"],
-                        "winning_trades": result["winning_trades"],
-                        "losing_trades": result["losing_trades"],
-                        "win_rate": result["win_rate"],
-                        "total_pnl": result["total_pnl"],
-                        "final_capital": result["final_capital"],
-                        "max_drawdown": result["max_drawdown"],
-                        "sharpe_ratio": result.get("sharpe_ratio"),
-                        "profit_factor": result.get("profit_factor", 0),
-                    })
+                try:
+                    engine = BacktestEngine(
+                        strategy_type=strategy_type,
+                        initial_capital=capital,
+                        risk_per_trade=risk,
+                        stop_loss_pct=sl,
+                        take_profit_pct=tp,
+                    )
+                    result = engine.run(candles)
+                    if result["total_trades"] > 0:
+                        results.append({
+                            "strategy": strategy_type,
+                            "sl_pct": sl,
+                            "tp_pct": tp,
+                            "risk_pct": risk,
+                            "total_trades": result["total_trades"],
+                            "winning_trades": result["winning_trades"],
+                            "losing_trades": result["losing_trades"],
+                            "win_rate": result["win_rate"],
+                            "total_pnl": result["total_pnl"],
+                            "final_capital": result["final_capital"],
+                            "max_drawdown": result["max_drawdown"],
+                            "sharpe_ratio": clean_value(result.get("sharpe_ratio")),
+                            "profit_factor": clean_value(result.get("profit_factor", 0)),
+                        })
+                except Exception as e:
+                    logger.warning(f"Erreur {strategy_type} SL={sl} TP={tp}: {e}")
 
     results.sort(key=lambda x: x["total_pnl"], reverse=True)
     return results
@@ -59,8 +72,11 @@ def optimize_all_strategies(
 ) -> List[Dict]:
     all_results = []
     for strategy_type in STRATEGY_MAP.keys():
-        results = optimize_strategy(strategy_type, candles, capital, sl_values, tp_values)
-        all_results.extend(results)
+        try:
+            results = optimize_strategy(strategy_type, candles, capital, sl_values, tp_values)
+            all_results.extend(results)
+        except Exception as e:
+            logger.warning(f"Erreur optimisation {strategy_type}: {e}")
 
     all_results.sort(key=lambda x: x["total_pnl"], reverse=True)
     return all_results

@@ -7,10 +7,12 @@ from app.db.models.optimizer_result import OptimizerResult
 from app.core.dependencies import get_current_user
 from app.services.backtest.optimizer import optimize_strategy, optimize_all_strategies
 from app.services.backtest.data_loader import load_from_db
-from app.services.market_data.cache_service import fetch_and_cache
 from app.services.strategies.builtin import STRATEGY_MAP
+import asyncio
+import logging
 
 router = APIRouter()
+logger = logging.getLogger("optimizer_route")
 
 
 def save_result(db, user_id, mode, symbol, timeframe, candles_count, capital, results):
@@ -37,6 +39,30 @@ def save_result(db, user_id, mode, symbol, timeframe, candles_count, capital, re
     return record.id
 
 
+async def fetch_candles_with_retry(db, symbol, timeframe, limit, retries=3):
+    from app.services.market_data.cache_service import fetch_and_cache
+
+    candles = load_from_db(db, symbol, timeframe)
+    if len(candles) >= 50:
+        logger.info(f"Cache OK: {symbol} {timeframe} = {len(candles)} candles")
+        return candles
+
+    for attempt in range(retries):
+        try:
+            await fetch_and_cache(db, symbol, timeframe, limit)
+            candles = load_from_db(db, symbol, timeframe)
+            if len(candles) >= 50:
+                return candles
+        except Exception as e:
+            if attempt < retries - 1:
+                logger.warning(f"Retry {attempt+1}/{retries} {symbol} {timeframe}: {e}")
+                await asyncio.sleep(2)
+            else:
+                logger.error(f"Echec apres {retries} tentatives: {symbol} {timeframe}")
+
+    return load_from_db(db, symbol, timeframe)
+
+
 @router.post("/single/{strategy_type}/{base}/{quote}")
 async def optimize_single(
     strategy_type: str,
@@ -52,11 +78,10 @@ async def optimize_single(
         return {"error": f"Type inconnu. Disponibles: {list(STRATEGY_MAP.keys())}"}
 
     symbol = f"{base.upper()}/{quote.upper()}"
-    await fetch_and_cache(db, symbol, timeframe, limit)
-    candles = load_from_db(db, symbol, timeframe)
+    candles = await fetch_candles_with_retry(db, symbol, timeframe, limit)
 
     if len(candles) < 50:
-        return {"error": "Pas assez de donnees (minimum 50 bougies)"}
+        return {"error": f"Pas assez de donnees ({len(candles)} candles, minimum 50). Binance testnet peut etre en panne."}
 
     results = optimize_strategy(strategy_type, candles, capital)
     for r in results:
@@ -90,28 +115,36 @@ async def optimize_single_multi_tf(
     symbol = f"{base.upper()}/{quote.upper()}"
     timeframes = ["5m", "15m", "1h", "4h"]
     all_results = []
+    tested_tfs = []
 
     for tf in timeframes:
         try:
-            await fetch_and_cache(db, symbol, tf, limit)
-            candles = load_from_db(db, symbol, tf)
+            candles = await fetch_candles_with_retry(db, symbol, tf, limit)
             if len(candles) < 50:
+                logger.warning(f"Pas assez de candles pour {tf}: {len(candles)}")
                 continue
             results = optimize_strategy(strategy_type, candles, capital)
             for r in results:
                 r["timeframe"] = tf
             all_results.extend(results)
-        except Exception:
+            tested_tfs.append(tf)
+            logger.info(f"OK {tf}: {len(results)} resultats")
+        except Exception as e:
+            logger.error(f"Erreur {tf}: {e}")
             continue
 
     all_results.sort(key=lambda x: x["total_pnl"], reverse=True)
+
+    if not all_results:
+        return {"error": "Aucun resultat. Binance testnet timeout sur tous les timeframes. Reessayez."}
+
     record_id = save_result(db, current_user.id, "single-multi-tf", symbol, "multi", 0, capital, all_results)
 
     return {
         "id": record_id,
         "symbol": symbol,
         "strategy": strategy_type,
-        "timeframes_tested": timeframes,
+        "timeframes_tested": tested_tfs,
         "combinations_tested": len(all_results),
         "best": all_results[0] if all_results else None,
         "all_results": all_results[:50],
@@ -129,11 +162,10 @@ async def optimize_all(
     current_user: User = Depends(get_current_user),
 ):
     symbol = f"{base.upper()}/{quote.upper()}"
-    await fetch_and_cache(db, symbol, timeframe, limit)
-    candles = load_from_db(db, symbol, timeframe)
+    candles = await fetch_candles_with_retry(db, symbol, timeframe, limit)
 
     if len(candles) < 50:
-        return {"error": "Pas assez de donnees (minimum 50 bougies)"}
+        return {"error": f"Pas assez de donnees ({len(candles)} candles, minimum 50). Binance testnet peut etre en panne."}
 
     results = optimize_all_strategies(candles, capital)
     for r in results:
@@ -163,27 +195,35 @@ async def optimize_all_multi_tf(
     symbol = f"{base.upper()}/{quote.upper()}"
     timeframes = ["5m", "15m", "1h", "4h"]
     all_results = []
+    tested_tfs = []
 
     for tf in timeframes:
         try:
-            await fetch_and_cache(db, symbol, tf, limit)
-            candles = load_from_db(db, symbol, tf)
+            candles = await fetch_candles_with_retry(db, symbol, tf, limit)
             if len(candles) < 50:
+                logger.warning(f"Pas assez de candles pour {tf}: {len(candles)}")
                 continue
             results = optimize_all_strategies(candles, capital)
             for r in results:
                 r["timeframe"] = tf
             all_results.extend(results)
-        except Exception:
+            tested_tfs.append(tf)
+            logger.info(f"OK {tf}: {len(results)} resultats")
+        except Exception as e:
+            logger.error(f"Erreur {tf}: {e}")
             continue
 
     all_results.sort(key=lambda x: x["total_pnl"], reverse=True)
+
+    if not all_results:
+        return {"error": "Aucun resultat. Binance testnet timeout sur tous les timeframes. Reessayez."}
+
     record_id = save_result(db, current_user.id, "all-multi-tf", symbol, "multi", 0, capital, all_results)
 
     return {
         "id": record_id,
         "symbol": symbol,
-        "timeframes_tested": timeframes,
+        "timeframes_tested": tested_tfs,
         "combinations_tested": len(all_results),
         "best": all_results[0] if all_results else None,
         "all_results": all_results[:50],

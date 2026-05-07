@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_CHAT_ID: str = ""
 
-    AI_PROVIDER: str = "claude"
+    AI_PROVIDER: str = "openai"
     CLAUDE_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     OLLAMA_MODEL: str = "deepseek-r1"
