@@ -10,7 +10,11 @@ from app.services.backtest.data_loader import load_from_db
 from app.services.strategies.builtin import STRATEGY_MAP
 import asyncio
 from functools import partial
+from concurrent.futures import ProcessPoolExecutor
 import logging
+
+# ProcessPoolExecutor global — max 2 processus pour ne pas surcharger le VPS
+process_pool = ProcessPoolExecutor(max_workers=2)
 
 router = APIRouter()
 logger = logging.getLogger("optimizer_route")
@@ -86,7 +90,7 @@ async def optimize_single(
 
     loop = asyncio.get_event_loop()
     results = await loop.run_in_executor(
-        None, partial(optimize_strategy, strategy_type, candles, capital)
+        process_pool, partial(optimize_strategy, strategy_type, candles, capital)
     )
     for r in results:
         r["timeframe"] = timeframe
@@ -129,7 +133,7 @@ async def optimize_single_multi_tf(
                 continue
             loop = asyncio.get_event_loop()
             results = await loop.run_in_executor(
-                None, partial(optimize_strategy, strategy_type, candles, capital)
+                process_pool, partial(optimize_strategy, strategy_type, candles, capital)
             )
             for r in results:
                 r["timeframe"] = tf
@@ -176,7 +180,7 @@ async def optimize_all(
 
     loop = asyncio.get_event_loop()
     results = await loop.run_in_executor(
-        None, partial(optimize_all_strategies, candles, capital)
+        process_pool, partial(optimize_all_strategies, candles, capital)
     )
     for r in results:
         r["timeframe"] = timeframe
@@ -215,7 +219,7 @@ async def optimize_all_multi_tf(
                 continue
             loop = asyncio.get_event_loop()
             results = await loop.run_in_executor(
-                None, partial(optimize_all_strategies, candles, capital)
+                process_pool, partial(optimize_all_strategies, candles, capital)
             )
             for r in results:
                 r["timeframe"] = tf
