@@ -11,7 +11,7 @@ class RiskManager:
         self,
         capital: float,
         risk_per_trade: float = 0.02,
-        max_open_trades: int = 3,
+        max_open_trades: int = 999,
         max_drawdown: float = 0.10,
         stop_loss_pct: float = 0.01,
         take_profit_pct: float = 0.02,
@@ -29,9 +29,7 @@ class RiskManager:
             Trade.status == "open",
         ).count()
 
-        if open_trades >= self.max_open_trades:
-            return {"allowed": False, "reason": f"Max trades atteint ({self.max_open_trades})"}
-
+        # Pas de blocage sur max_open_trades — le bot est libre de trader
         total_pnl = self.get_total_pnl(db, user_id)
         drawdown = abs(total_pnl) / self.capital if total_pnl < 0 else 0
 
