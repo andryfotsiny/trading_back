@@ -1,4 +1,3 @@
-# app/services/execution/order_manager.py
 from typing import List, Dict
 from sqlalchemy.orm import Session
 from app.db.models.trade import Trade
@@ -20,6 +19,7 @@ def get_open_trades(db: Session, user_id: int) -> List[Dict]:
             "stop_loss": t.stop_loss,
             "take_profit": t.take_profit,
             "strategy_name": t.strategy_name,
+            "strategy_type": t.strategy_type,
             "is_paper": t.is_paper,
             "opened_at": t.opened_at.isoformat() if t.opened_at else None,
         }
@@ -43,6 +43,7 @@ def get_trade_history(db: Session, user_id: int, limit: int = 50) -> List[Dict]:
             "pnl": t.pnl,
             "pnl_pct": t.pnl_pct,
             "strategy_name": t.strategy_name,
+            "strategy_type": t.strategy_type,
             "is_paper": t.is_paper,
             "opened_at": t.opened_at.isoformat() if t.opened_at else None,
             "closed_at": t.closed_at.isoformat() if t.closed_at else None,

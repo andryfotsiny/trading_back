@@ -1,4 +1,3 @@
-# app/db/models/trade.py
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -22,6 +21,7 @@ class Trade(Base):
     fee_total = Column(Float, default=0.0)
     status = Column(String, default="open")
     strategy_name = Column(String, nullable=True)
+    strategy_type = Column(String, nullable=True)
     is_paper = Column(Boolean, default=True)
     opened_at = Column(DateTime(timezone=True), server_default=func.now())
     closed_at = Column(DateTime(timezone=True), nullable=True)
