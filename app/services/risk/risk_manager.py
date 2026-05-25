@@ -1,4 +1,3 @@
-# app/services/risk/risk_manager.py
 from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 from app.db.models.trade import Trade
@@ -28,15 +27,7 @@ class RiskManager:
             Trade.user_id == user_id,
             Trade.status == "open",
         ).count()
-
-        # Pas de blocage sur max_open_trades — le bot est libre de trader
-        total_pnl = self.get_total_pnl(db, user_id)
-        drawdown = abs(total_pnl) / self.capital if total_pnl < 0 else 0
-
-        if drawdown >= self.max_drawdown:
-            return {"allowed": False, "reason": f"Max drawdown atteint ({self.max_drawdown*100}%)"}
-
-        return {"allowed": True, "open_trades": open_trades, "drawdown": round(drawdown, 4)}
+        return {"allowed": True, "open_trades": open_trades, "drawdown": 0}
 
     def prepare_trade(self, entry_price: float, side: str) -> Dict:
         sl = calculate_stop_loss(entry_price, side, self.stop_loss_pct)
