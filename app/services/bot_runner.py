@@ -1,4 +1,3 @@
-# app/services/bot_runner.py
 from app.db.database import SessionLocal
 from app.db.models.strategy import Strategy
 from app.db.models.trade import Trade
@@ -41,6 +40,14 @@ async def bot_cycle():
             if can_trade:
                 for strategy in strategies:
                     try:
+                        existing = db.query(Trade).filter(
+                            Trade.user_id == strategy.user_id,
+                            Trade.strategy_name == strategy.name,
+                            Trade.status == "open",
+                        ).count()
+                        if existing > 0:
+                            continue
+
                         candles = await exchange.get_ohlcv(strategy.symbol, strategy.timeframe, 100)
                         signal = run_strategy(strategy.strategy_type, candles, strategy.parameters)
 
@@ -52,6 +59,7 @@ async def bot_cycle():
                                 side=signal["action"],
                                 entry_price=signal["price"],
                                 strategy_name=strategy.name,
+                                strategy_type=strategy.strategy_type,
                                 risk_per_trade=strategy.risk_per_trade,
                                 stop_loss_pct=strategy.stop_loss_pct,
                                 take_profit_pct=strategy.take_profit_pct,
