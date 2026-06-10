@@ -26,6 +26,23 @@ async def check_market_conditions():
         return True, {}
 
 
+def calculate_ma50(candles: list) -> float:
+    if len(candles) < 50:
+        return None
+    closes = [c[4] for c in candles[-50:]]
+    return sum(closes) / 50
+
+
+def is_trend_favorable(signal_action: str, current_price: float, ma50: float) -> bool:
+    if ma50 is None:
+        return True
+    if signal_action == "BUY" and current_price < ma50:
+        return False
+    if signal_action == "SELL" and current_price > ma50:
+        return False
+    return True
+
+
 async def bot_cycle():
     db = SessionLocal()
     try:
@@ -52,12 +69,19 @@ async def bot_cycle():
                         signal = run_strategy(strategy.strategy_type, candles, strategy.parameters)
 
                         if signal:
-                            logger.info(f"Signal {signal['action']} sur {signal['price']} ({strategy.name})")
+                            current_price = signal["price"]
+                            ma50 = calculate_ma50(candles)
+
+                            if not is_trend_favorable(signal["action"], current_price, ma50):
+                                logger.info(f"Filtre MA50 ({ma50:.2f}): signal {signal['action']} ignore pour {strategy.name}")
+                                continue
+
+                            logger.info(f"Signal {signal['action']} sur {current_price} ({strategy.name}) MA50={ma50:.2f}")
                             executor = PaperExecutor(db, strategy.user_id, capital=1000)
                             result = executor.open_trade(
                                 symbol=strategy.symbol,
                                 side=signal["action"],
-                                entry_price=signal["price"],
+                                entry_price=current_price,
                                 strategy_name=strategy.name,
                                 strategy_type=strategy.strategy_type,
                                 risk_per_trade=strategy.risk_per_trade,
@@ -70,7 +94,7 @@ async def bot_cycle():
                                     await notifier.notify_trade_open(
                                         symbol=strategy.symbol,
                                         side=signal["action"],
-                                        price=signal["price"],
+                                        price=current_price,
                                         quantity=result["quantity"],
                                         sl=result["stop_loss"],
                                         tp=result["take_profit"],
