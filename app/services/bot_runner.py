@@ -29,7 +29,7 @@ async def check_market_conditions():
 def calculate_ma50(candles: list) -> float:
     if len(candles) < 50:
         return None
-    closes = [c[4] for c in candles[-50:]]
+    closes = [c["close"] for c in candles[-50:]]
     return sum(closes) / 50
 
 
@@ -101,8 +101,8 @@ async def bot_cycle():
                                     )
                                 except Exception:
                                     pass
-                    except Exception as e:
-                        logger.error(f"Erreur strategie {strategy.name}: {e}")
+                    except Exception:
+                        logger.exception(f"Erreur strategie {strategy.name}")
 
             open_trades = db.query(Trade).filter(Trade.status == "open").all()
             for trade in open_trades:
