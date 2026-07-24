@@ -8,6 +8,7 @@ from app.services.risk.stop_loss import check_trade_exit
 from app.services.risk.trailing_stop import calculate_trailing_stop, calculate_partial_tp
 from app.services.notifications.telegram_notifier import notifier
 from app.services.strategies.indicators.atr import get_atr_pct
+from datetime import datetime, timezone
 import logging
 
 logger = logging.getLogger("bot_runner")
@@ -89,6 +90,17 @@ async def bot_cycle():
                         signal = run_strategy(strategy.strategy_type, closed_candles, strategy.parameters)
 
                         if signal:
+                            bar_start = datetime.fromtimestamp(
+                                candles[-1]["timestamp"] / 1000, tz=timezone.utc
+                            )
+                            already_traded = db.query(Trade).filter(
+                                Trade.user_id == strategy.user_id,
+                                Trade.strategy_name == strategy.name,
+                                Trade.opened_at >= bar_start,
+                            ).count()
+                            if already_traded > 0:
+                                continue
+
                             ticker = await exchange.get_ticker(strategy.symbol)
                             current_price = ticker["last"]
                             ma50 = calculate_ma50(closed_candles)
