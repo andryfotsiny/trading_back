@@ -7,11 +7,15 @@ from app.services.risk.risk_manager import RiskManager
 from app.services.risk.stop_loss import check_trade_exit
 
 
+FEE_RATE = 0.001
+
+
 class PaperExecutor:
 
-    def __init__(self, db: Session, user_id: int, capital: float = 1000):
+    def __init__(self, db: Session, user_id: int, capital: float = 1000, fee_rate: float = FEE_RATE):
         self.db = db
         self.user_id = user_id
+        self.fee_rate = fee_rate
         self.rm = RiskManager(capital=capital)
 
     def open_trade(
@@ -34,6 +38,7 @@ class PaperExecutor:
             return {"error": check["reason"]}
 
         prep = self.rm.prepare_trade(entry_price, side)
+        entry_fee = round(entry_price * prep["quantity"] * self.fee_rate, 8)
 
         trade = Trade(
             user_id=self.user_id,
@@ -46,6 +51,7 @@ class PaperExecutor:
             status="open",
             strategy_name=strategy_name,
             strategy_type=strategy_type,
+            fee_total=entry_fee,
             is_paper=True,
         )
         self.db.add(trade)
@@ -63,6 +69,7 @@ class PaperExecutor:
             status="filled",
             filled_quantity=prep["quantity"],
             filled_price=entry_price,
+            fee=entry_fee,
             executed_at=datetime.now(timezone.utc),
         )
         self.db.add(order)
@@ -93,11 +100,18 @@ class PaperExecutor:
             return {"error": "Trade non trouve ou deja ferme"}
 
         if trade.side == "BUY":
-            pnl = (exit_price - trade.entry_price) * trade.quantity
+            gross = (exit_price - trade.entry_price) * trade.quantity
         else:
-            pnl = (trade.entry_price - exit_price) * trade.quantity
+            gross = (trade.entry_price - exit_price) * trade.quantity
 
-        pnl_pct = pnl / (trade.entry_price * trade.quantity) * 100
+        exit_fee = round(exit_price * trade.quantity * self.fee_rate, 8)
+        trade.fee_total = round((trade.fee_total or 0.0) + exit_fee, 8)
+
+        banked = trade.pnl or 0.0
+        pnl = banked + gross - trade.fee_total
+
+        notional = trade.entry_price * trade.quantity
+        pnl_pct = (pnl / notional * 100) if notional else 0.0
 
         trade.exit_price = exit_price
         trade.pnl = round(pnl, 4)
@@ -116,6 +130,7 @@ class PaperExecutor:
             status="filled",
             filled_quantity=trade.quantity,
             filled_price=exit_price,
+            fee=exit_fee,
             executed_at=datetime.now(timezone.utc),
         )
         self.db.add(order)
