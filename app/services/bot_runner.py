@@ -159,19 +159,20 @@ async def bot_cycle():
                         db.commit()
                         logger.info(f"Trailing SL: {trade.symbol} -> {trailing['new_sl']}")
 
-                    partial = calculate_partial_tp(
-                        trade.side, trade.entry_price, price, trade.take_profit
-                    )
-                    if partial["should_close"] and partial["close_pct"] < 1.0:
-                        original_qty = trade.quantity
-                        close_qty = original_qty * partial["close_pct"]
-                        trade.quantity = original_qty - close_qty
-                        pnl = close_qty * abs(price - trade.entry_price)
-                        if trade.side == "SELL":
-                            pnl = close_qty * (trade.entry_price - price)
-                        trade.pnl = (trade.pnl or 0) + pnl
-                        db.commit()
-                        logger.info(f"Partial TP: {trade.symbol} qty={close_qty:.6f}")
+                    if params.get("enable_partial_tp", False):
+                        partial = calculate_partial_tp(
+                            trade.side, trade.entry_price, price, trade.take_profit
+                        )
+                        if partial["should_close"] and partial["close_pct"] < 1.0:
+                            original_qty = trade.quantity
+                            close_qty = original_qty * partial["close_pct"]
+                            trade.quantity = original_qty - close_qty
+                            pnl = close_qty * abs(price - trade.entry_price)
+                            if trade.side == "SELL":
+                                pnl = close_qty * (trade.entry_price - price)
+                            trade.pnl = (trade.pnl or 0) + pnl
+                            db.commit()
+                            logger.info(f"Partial TP: {trade.symbol} qty={close_qty:.6f}")
 
                     exit_info = check_trade_exit(
                         price, trade.entry_price, trade.side, trade.stop_loss, trade.take_profit
