@@ -3,7 +3,7 @@ from typing import Dict, Optional
 from sqlalchemy.orm import Session
 from app.db.models.trade import Trade
 from app.db.models.order import Order
-from app.services.risk.risk_manager import RiskManager
+from app.services.risk.risk_manager import RiskManager, normalize_side
 from app.services.risk.stop_loss import check_trade_exit
 
 
@@ -29,6 +29,7 @@ class PaperExecutor:
         stop_loss_pct: float = 0.01,
         take_profit_pct: float = 0.02,
     ) -> Optional[Dict]:
+        side = normalize_side(side)
         self.rm.risk_per_trade = risk_per_trade
         self.rm.stop_loss_pct = stop_loss_pct
         self.rm.take_profit_pct = take_profit_pct

@@ -6,6 +6,8 @@ from app.core.config import settings
 IMPACT_MAP = {"low": 1, "medium": 2, "high": 3}
 
 async def get_economic_calendar(from_date=None, to_date=None, country=None, importance=None):
+    if not settings.economic_calendar_enabled:
+        return []
     api_key = getattr(settings, "finnhub_api_key", None)
     if not api_key:
         return []
@@ -47,6 +49,8 @@ async def get_economic_calendar(from_date=None, to_date=None, country=None, impo
     return result
 
 async def get_high_impact_events(hours_ahead=4):
+    if not settings.economic_calendar_enabled:
+        return []
     api_key = getattr(settings, "finnhub_api_key", None)
     if not api_key:
         return []

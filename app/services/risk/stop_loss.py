@@ -36,21 +36,3 @@ def check_trade_exit(
             "pnl_per_unit": round(pnl, 8),
         }
     return None
-
-
-def trailing_stop_loss(
-    current_price: float,
-    highest_price: float,
-    entry_price: float,
-    trailing_pct: float,
-    side: str,
-) -> Dict:
-    if side == "BUY":
-        new_highest = max(highest_price, current_price)
-        trail_price = round(new_highest * (1 - trailing_pct), 8)
-        triggered = current_price <= trail_price
-        return {"highest": new_highest, "trail_price": trail_price, "triggered": triggered}
-    new_lowest = min(highest_price, current_price)
-    trail_price = round(new_lowest * (1 + trailing_pct), 8)
-    triggered = current_price >= trail_price
-    return {"lowest": new_lowest, "trail_price": trail_price, "triggered": triggered}

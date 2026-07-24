@@ -4,6 +4,13 @@ from app.db.models.trade import Trade
 from app.services.risk.position_sizer import calculate_position_size, calculate_stop_loss, calculate_take_profit
 
 
+def normalize_side(side: str) -> str:
+    normalized = (side or "").strip().upper()
+    if normalized not in ("BUY", "SELL"):
+        raise ValueError(f"side invalide: {side}")
+    return normalized
+
+
 class RiskManager:
 
     def __init__(
@@ -14,6 +21,7 @@ class RiskManager:
         max_drawdown: float = 0.10,
         stop_loss_pct: float = 0.01,
         take_profit_pct: float = 0.02,
+        enforce_risk_limits: bool = False,
     ):
         self.capital = capital
         self.risk_per_trade = risk_per_trade
@@ -21,13 +29,25 @@ class RiskManager:
         self.max_drawdown = max_drawdown
         self.stop_loss_pct = stop_loss_pct
         self.take_profit_pct = take_profit_pct
+        self.enforce_risk_limits = enforce_risk_limits
 
     def can_open_trade(self, db: Session, user_id: int) -> Dict:
         open_trades = db.query(Trade).filter(
             Trade.user_id == user_id,
             Trade.status == "open",
         ).count()
-        return {"allowed": True, "open_trades": open_trades, "drawdown": 0}
+        total_pnl = self.get_total_pnl(db, user_id)
+        drawdown = abs(total_pnl) / self.capital if total_pnl < 0 and self.capital > 0 else 0
+
+        if not self.enforce_risk_limits:
+            return {"allowed": True, "open_trades": open_trades, "drawdown": round(drawdown, 4)}
+
+        if open_trades >= self.max_open_trades:
+            return {"allowed": False, "reason": f"max_open_trades atteint ({open_trades}/{self.max_open_trades})", "open_trades": open_trades, "drawdown": round(drawdown, 4)}
+        if drawdown >= self.max_drawdown:
+            return {"allowed": False, "reason": f"max_drawdown atteint ({drawdown:.2%}/{self.max_drawdown:.2%})", "open_trades": open_trades, "drawdown": round(drawdown, 4)}
+
+        return {"allowed": True, "open_trades": open_trades, "drawdown": round(drawdown, 4)}
 
     def prepare_trade(self, entry_price: float, side: str) -> Dict:
         sl = calculate_stop_loss(entry_price, side, self.stop_loss_pct)

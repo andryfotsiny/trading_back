@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.models.trade import Trade
 from app.db.models.order import Order
 from app.services.exchange.factory import create_exchange
-from app.services.risk.risk_manager import RiskManager
+from app.services.risk.risk_manager import RiskManager, normalize_side
 
 
 class OrderExecutor:
@@ -13,7 +13,13 @@ class OrderExecutor:
     def __init__(self, db: Session, user_id: int, capital: float = 1000):
         self.db = db
         self.user_id = user_id
-        self.rm = RiskManager(capital=capital)
+        self.rm = RiskManager(capital=capital, enforce_risk_limits=True)
+
+    async def _resolve_capital(self, exchange) -> None:
+        balance = await exchange.get_balance()
+        usdt = balance.get("free", {}).get("USDT", 0)
+        if usdt and usdt > 0:
+            self.rm.capital = usdt
 
     async def open_trade(
         self,
@@ -25,17 +31,20 @@ class OrderExecutor:
         stop_loss_pct: float = 0.01,
         take_profit_pct: float = 0.02,
     ) -> Optional[Dict]:
+        side = normalize_side(side)
         self.rm.risk_per_trade = risk_per_trade
         self.rm.stop_loss_pct = stop_loss_pct
         self.rm.take_profit_pct = take_profit_pct
 
-        check = self.rm.can_open_trade(self.db, self.user_id)
-        if not check["allowed"]:
-            return {"error": check["reason"]}
-
-        prep = self.rm.prepare_trade(entry_price, side)
         exchange = create_exchange()
         try:
+            await self._resolve_capital(exchange)
+
+            check = self.rm.can_open_trade(self.db, self.user_id)
+            if not check["allowed"]:
+                return {"error": check["reason"]}
+
+            prep = self.rm.prepare_trade(entry_price, side)
             order_result = await exchange.create_order(
                 symbol=symbol,
                 side=side.lower(),
