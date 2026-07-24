@@ -7,9 +7,28 @@ from app.services.execution.paper_executor import PaperExecutor
 from app.services.risk.stop_loss import check_trade_exit
 from app.services.risk.trailing_stop import calculate_trailing_stop, calculate_partial_tp
 from app.services.notifications.telegram_notifier import notifier
+from app.services.strategies.indicators.atr import get_atr_pct
 import logging
 
 logger = logging.getLogger("bot_runner")
+
+MIN_SL_PCT = 0.005
+MAX_SL_PCT = 0.05
+MIN_TP_PCT = 0.0075
+MAX_TP_PCT = 0.10
+
+
+def resolve_risk_levels(candles: list, strategy, params: dict) -> tuple:
+    if not params.get("use_atr_risk", True):
+        return strategy.stop_loss_pct, strategy.take_profit_pct
+
+    atr_pct = get_atr_pct(candles, params.get("atr_period", 14))
+    if not atr_pct:
+        return strategy.stop_loss_pct, strategy.take_profit_pct
+
+    sl = min(max(atr_pct * params.get("atr_sl_mult", 2.0), MIN_SL_PCT), MAX_SL_PCT)
+    tp = min(max(atr_pct * params.get("atr_tp_mult", 3.0), MIN_TP_PCT), MAX_TP_PCT)
+    return round(sl, 6), round(tp, 6)
 
 
 async def check_market_conditions():
@@ -66,17 +85,22 @@ async def bot_cycle():
                             continue
 
                         candles = await exchange.get_ohlcv(strategy.symbol, strategy.timeframe, 100)
-                        signal = run_strategy(strategy.strategy_type, candles, strategy.parameters)
+                        closed_candles = candles[:-1]
+                        signal = run_strategy(strategy.strategy_type, closed_candles, strategy.parameters)
 
                         if signal:
-                            current_price = signal["price"]
-                            ma50 = calculate_ma50(candles)
+                            ticker = await exchange.get_ticker(strategy.symbol)
+                            current_price = ticker["last"]
+                            ma50 = calculate_ma50(closed_candles)
 
                             if not is_trend_favorable(signal["action"], current_price, ma50):
                                 logger.info(f"Filtre MA50 ({ma50:.2f}): signal {signal['action']} ignore pour {strategy.name}")
                                 continue
 
-                            logger.info(f"Signal {signal['action']} sur {current_price} ({strategy.name}) MA50={ma50:.2f}")
+                            params = strategy.parameters or {}
+                            stop_loss_pct, take_profit_pct = resolve_risk_levels(closed_candles, strategy, params)
+
+                            logger.info(f"Signal {signal['action']} sur {current_price} ({strategy.name}) MA50={ma50:.2f} SL={stop_loss_pct:.4f} TP={take_profit_pct:.4f}")
                             executor = PaperExecutor(db, strategy.user_id, capital=1000)
                             result = executor.open_trade(
                                 symbol=strategy.symbol,
@@ -85,8 +109,8 @@ async def bot_cycle():
                                 strategy_name=strategy.name,
                                 strategy_type=strategy.strategy_type,
                                 risk_per_trade=strategy.risk_per_trade,
-                                stop_loss_pct=strategy.stop_loss_pct,
-                                take_profit_pct=strategy.take_profit_pct,
+                                stop_loss_pct=stop_loss_pct,
+                                take_profit_pct=take_profit_pct,
                             )
                             if result and "error" not in result:
                                 logger.info(f"Trade ouvert: {result}")
@@ -115,10 +139,12 @@ async def bot_cycle():
                     strategy = strategies_by_name.get(trade.strategy_name)
                     params = (strategy.parameters or {}) if strategy else {}
                     trailing_pct = params.get("trailing_pct", 0.02)
-                    activation_pct = params.get(
-                        "trailing_activation_pct",
-                        strategy.stop_loss_pct if strategy and strategy.stop_loss_pct else 0.01,
+                    risk_pct = (
+                        abs(trade.entry_price - trade.stop_loss) / trade.entry_price
+                        if trade.entry_price and trade.stop_loss
+                        else 0.01
                     )
+                    activation_pct = params.get("trailing_activation_pct", risk_pct)
 
                     trailing = calculate_trailing_stop(
                         trade.side,
