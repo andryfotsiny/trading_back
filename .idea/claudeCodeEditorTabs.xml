@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ClaudeCodeEditorTabs">
+    <option name="activeSessionId" value="72767f5e-e2c5-423f-9c03-f9e80b47f100" />
+    <option name="openSessionIds">
+      <list>
+        <option value="e43b3727-aa60-49e0-b97d-ad36a28bc497" />
+        <option value="018cdfc3-0588-42f8-be2a-73a383fb5667" />
+        <option value="a3e8b4f8-3a7f-430a-a008-04ea9240d1ad" />
+        <option value="2a93b739-58f4-44ed-b6a4-735a3fa7ecfa" />
+        <option value="72767f5e-e2c5-423f-9c03-f9e80b47f100" />
+      </list>
+    </option>
+    <option name="sessionPaths">
+      <map>
+        <entry key="018cdfc3-0588-42f8-be2a-73a383fb5667" value="/sessions/daaf2593-c49b-4b2c-88d2-5ab407afc903" />
+        <entry key="2a93b739-58f4-44ed-b6a4-735a3fa7ecfa" value="/sessions/daaf2593-c49b-4b2c-88d2-5ab407afc903" />
+        <entry key="72767f5e-e2c5-423f-9c03-f9e80b47f100" value="/sessions/daaf2593-c49b-4b2c-88d2-5ab407afc903" />
+        <entry key="a3e8b4f8-3a7f-430a-a008-04ea9240d1ad" value="/sessions/daaf2593-c49b-4b2c-88d2-5ab407afc903" />
+        <entry key="e43b3727-aa60-49e0-b97d-ad36a28bc497" value="/sessions/daaf2593-c49b-4b2c-88d2-5ab407afc903" />
+      </map>
+    </option>
+    <option name="sessionTitles">
+      <map>
+        <entry key="018cdfc3-0588-42f8-be2a-73a383fb5667" value="Tu es un expert en debugging de trading bot Python" />
+        <entry key="2a93b739-58f4-44ed-b6a4-735a3fa7ecfa" value="Tu es un expert en debugging de trading bot Python" />
+        <entry key="72767f5e-e2c5-423f-9c03-f9e80b47f100" value="Tu es un expert en debugging de trading bot Python" />
+        <entry key="a3e8b4f8-3a7f-430a-a008-04ea9240d1ad" value="Tu es un expert en debugging de trading bot Python" />
+        <entry key="e43b3727-aa60-49e0-b97d-ad36a28bc497" value="Tu es un expert en debugging de trading bot Python" />
+      </map>
+    </option>
+  </component>
+</project>
