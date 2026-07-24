@@ -7,14 +7,19 @@ def calculate_trailing_stop(
     current_price: float,
     current_sl: float,
     trailing_pct: float = 0.02,
+    activation_pct: float = 0.01,
 ) -> dict:
     if side == "BUY":
-        new_sl = current_price * (1 - trailing_pct)
-        if new_sl > current_sl and current_price > entry_price:
+        if current_price < entry_price * (1 + activation_pct):
+            return {"new_sl": current_sl, "updated": False}
+        new_sl = max(current_price * (1 - trailing_pct), entry_price)
+        if new_sl > current_sl:
             return {"new_sl": round(new_sl, 6), "updated": True}
     elif side == "SELL":
-        new_sl = current_price * (1 + trailing_pct)
-        if new_sl < current_sl and current_price < entry_price:
+        if current_price > entry_price * (1 - activation_pct):
+            return {"new_sl": current_sl, "updated": False}
+        new_sl = min(current_price * (1 + trailing_pct), entry_price)
+        if new_sl < current_sl:
             return {"new_sl": round(new_sl, 6), "updated": True}
 
     return {"new_sl": current_sl, "updated": False}

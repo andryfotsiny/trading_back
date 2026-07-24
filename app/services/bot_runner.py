@@ -104,14 +104,29 @@ async def bot_cycle():
                     except Exception:
                         logger.exception(f"Erreur strategie {strategy.name}")
 
+            strategies_by_name = {s.name: s for s in strategies}
+
             open_trades = db.query(Trade).filter(Trade.status == "open").all()
             for trade in open_trades:
                 try:
                     ticker = await exchange.get_ticker(trade.symbol)
                     price = ticker["last"]
 
+                    strategy = strategies_by_name.get(trade.strategy_name)
+                    params = (strategy.parameters or {}) if strategy else {}
+                    trailing_pct = params.get("trailing_pct", 0.02)
+                    activation_pct = params.get(
+                        "trailing_activation_pct",
+                        strategy.stop_loss_pct if strategy and strategy.stop_loss_pct else 0.01,
+                    )
+
                     trailing = calculate_trailing_stop(
-                        trade.side, trade.entry_price, price, trade.stop_loss
+                        trade.side,
+                        trade.entry_price,
+                        price,
+                        trade.stop_loss,
+                        trailing_pct,
+                        activation_pct,
                     )
                     if trailing["updated"]:
                         trade.stop_loss = trailing["new_sl"]
