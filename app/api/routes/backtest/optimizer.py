@@ -1,7 +1,7 @@
 # app/api/routes/backtest/optimizer.py
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlalchemy.orm import Session
-from app.db.database import get_db
+from app.db.database import get_db, SessionLocal
 from app.db.models.user import User
 from app.db.models.optimizer_result import OptimizerResult
 from app.core.dependencies import get_current_user
@@ -68,6 +68,46 @@ async def fetch_candles_with_retry(db, symbol, timeframe, limit, retries=3):
     return load_from_db(db, symbol, timeframe)
 
 
+async def run_multi_tf(user_id, mode, symbol, optimize_fn, limit, capital):
+    db = SessionLocal()
+    try:
+        all_results = []
+        for tf in ["5m", "15m", "1h", "4h"]:
+            try:
+                candles = await fetch_candles_with_retry(db, symbol, tf, limit)
+                if len(candles) < 50:
+                    continue
+                loop = asyncio.get_event_loop()
+                results = await loop.run_in_executor(process_pool, partial(optimize_fn, candles, capital))
+                for r in results:
+                    r["timeframe"] = tf
+                all_results.extend(results)
+                logger.info(f"OK {tf}: {len(results)} resultats")
+            except Exception as e:
+                logger.error(f"Erreur {tf}: {e}")
+                continue
+        all_results.sort(key=lambda x: x["total_pnl"], reverse=True)
+        if all_results:
+            save_result(db, user_id, mode, symbol, "multi", 0, capital, all_results)
+    finally:
+        db.close()
+
+
+async def run_all_single_tf(user_id, symbol, timeframe, limit, capital):
+    db = SessionLocal()
+    try:
+        candles = await fetch_candles_with_retry(db, symbol, timeframe, limit)
+        if len(candles) < 50:
+            return
+        loop = asyncio.get_event_loop()
+        results = await loop.run_in_executor(process_pool, partial(optimize_all_strategies, candles, capital))
+        for r in results:
+            r["timeframe"] = timeframe
+        save_result(db, user_id, "all", symbol, timeframe, len(candles), capital, results)
+    finally:
+        db.close()
+
+
 @router.post("/single/{strategy_type}/{base}/{quote}")
 async def optimize_single(
     strategy_type: str,
@@ -112,139 +152,47 @@ async def optimize_single_multi_tf(
     strategy_type: str,
     base: str,
     quote: str,
+    background_tasks: BackgroundTasks,
     limit: int = Query(default=500, le=1000),
     capital: float = Query(default=1000),
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if strategy_type not in STRATEGY_MAP:
         return {"error": f"Type inconnu. Disponibles: {list(STRATEGY_MAP.keys())}"}
 
     symbol = f"{base.upper()}/{quote.upper()}"
-    timeframes = ["5m", "15m", "1h", "4h"]
-    all_results = []
-    tested_tfs = []
-
-    for tf in timeframes:
-        try:
-            candles = await fetch_candles_with_retry(db, symbol, tf, limit)
-            if len(candles) < 50:
-                logger.warning(f"Pas assez de candles pour {tf}: {len(candles)}")
-                continue
-            loop = asyncio.get_event_loop()
-            results = await loop.run_in_executor(
-                process_pool, partial(optimize_strategy, strategy_type, candles, capital)
-            )
-            for r in results:
-                r["timeframe"] = tf
-            all_results.extend(results)
-            tested_tfs.append(tf)
-            logger.info(f"OK {tf}: {len(results)} resultats")
-        except Exception as e:
-            logger.error(f"Erreur {tf}: {e}")
-            continue
-
-    all_results.sort(key=lambda x: x["total_pnl"], reverse=True)
-
-    if not all_results:
-        return {"error": "Aucun resultat. Binance testnet timeout sur tous les timeframes. Reessayez."}
-
-    record_id = save_result(db, current_user.id, "single-multi-tf", symbol, "multi", 0, capital, all_results)
-
-    return {
-        "id": record_id,
-        "symbol": symbol,
-        "strategy": strategy_type,
-        "timeframes_tested": tested_tfs,
-        "combinations_tested": len(all_results),
-        "best": all_results[0] if all_results else None,
-        "all_results": all_results[:50],
-    }
+    optimize_fn = partial(optimize_strategy, strategy_type)
+    background_tasks.add_task(run_multi_tf, current_user.id, "single-multi-tf", symbol, optimize_fn, limit, capital)
+    return {"status": "started", "mode": "single-multi-tf", "symbol": symbol}
 
 
 @router.post("/all/{base}/{quote}")
 async def optimize_all(
     base: str,
     quote: str,
+    background_tasks: BackgroundTasks,
     timeframe: str = Query(default="1h"),
     limit: int = Query(default=500, le=1000),
     capital: float = Query(default=1000),
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     symbol = f"{base.upper()}/{quote.upper()}"
-    candles = await fetch_candles_with_retry(db, symbol, timeframe, limit)
-
-    if len(candles) < 50:
-        return {"error": f"Pas assez de donnees ({len(candles)} candles, minimum 50). Binance testnet peut etre en panne."}
-
-    loop = asyncio.get_event_loop()
-    results = await loop.run_in_executor(
-        process_pool, partial(optimize_all_strategies, candles, capital)
-    )
-    for r in results:
-        r["timeframe"] = timeframe
-    record_id = save_result(db, current_user.id, "all", symbol, timeframe, len(candles), capital, results)
-
-    return {
-        "id": record_id,
-        "symbol": symbol,
-        "strategies_tested": list(STRATEGY_MAP.keys()),
-        "candles": len(candles),
-        "combinations_tested": len(results),
-        "best": results[0] if results else None,
-        "all_results": results[:50],
-    }
+    background_tasks.add_task(run_all_single_tf, current_user.id, symbol, timeframe, limit, capital)
+    return {"status": "started", "mode": "all", "symbol": symbol}
 
 
 @router.post("/all-multi-tf/{base}/{quote}")
 async def optimize_all_multi_tf(
     base: str,
     quote: str,
+    background_tasks: BackgroundTasks,
     limit: int = Query(default=500, le=1000),
     capital: float = Query(default=1000),
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     symbol = f"{base.upper()}/{quote.upper()}"
-    timeframes = ["5m", "15m", "1h", "4h"]
-    all_results = []
-    tested_tfs = []
-
-    for tf in timeframes:
-        try:
-            candles = await fetch_candles_with_retry(db, symbol, tf, limit)
-            if len(candles) < 50:
-                logger.warning(f"Pas assez de candles pour {tf}: {len(candles)}")
-                continue
-            loop = asyncio.get_event_loop()
-            results = await loop.run_in_executor(
-                process_pool, partial(optimize_all_strategies, candles, capital)
-            )
-            for r in results:
-                r["timeframe"] = tf
-            all_results.extend(results)
-            tested_tfs.append(tf)
-            logger.info(f"OK {tf}: {len(results)} resultats")
-        except Exception as e:
-            logger.error(f"Erreur {tf}: {e}")
-            continue
-
-    all_results.sort(key=lambda x: x["total_pnl"], reverse=True)
-
-    if not all_results:
-        return {"error": "Aucun resultat. Binance testnet timeout sur tous les timeframes. Reessayez."}
-
-    record_id = save_result(db, current_user.id, "all-multi-tf", symbol, "multi", 0, capital, all_results)
-
-    return {
-        "id": record_id,
-        "symbol": symbol,
-        "timeframes_tested": tested_tfs,
-        "combinations_tested": len(all_results),
-        "best": all_results[0] if all_results else None,
-        "all_results": all_results[:50],
-    }
+    background_tasks.add_task(run_multi_tf, current_user.id, "all-multi-tf", symbol, optimize_all_strategies, limit, capital)
+    return {"status": "started", "mode": "all-multi-tf", "symbol": symbol}
 
 
 @router.get("/history")
