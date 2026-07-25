@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OLLAMA_MODEL: str = "deepseek-r1"
     finnhub_api_key: str = ""
-    economic_calendar_enabled: bool = False
+    economic_calendar_enabled: bool = True
 
     class Config:
         env_file = ".env"

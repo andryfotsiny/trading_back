@@ -1,74 +1,81 @@
 import httpx
-from typing import Dict, List
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from app.core.config import settings
 
-IMPACT_MAP = {"low": 1, "medium": 2, "high": 3}
+FEED_URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"
+IMPACT_MAP = {"high": 3, "medium": 2, "low": 1, "holiday": 1}
+IMPACT_LABELS = {3: "HIGH", 2: "MEDIUM", 1: "LOW"}
+
+
+async def _fetch_feed():
+    async with httpx.AsyncClient(timeout=15, headers={"User-Agent": "Mozilla/5.0"}) as client:
+        response = await client.get(FEED_URL)
+        response.raise_for_status()
+        return response.json()
+
 
 async def get_economic_calendar(from_date=None, to_date=None, country=None, importance=None):
     if not settings.economic_calendar_enabled:
         return []
-    api_key = getattr(settings, "finnhub_api_key", None)
-    if not api_key:
+    try:
+        raw = await _fetch_feed()
+    except Exception:
         return []
-    if not from_date:
-        from_date = datetime.utcnow().strftime("%Y-%m-%d")
-    if not to_date:
-        to_date = (datetime.utcnow() + timedelta(days=7)).strftime("%Y-%m-%d")
-    url = "https://finnhub.io/api/v1/calendar/economic"
-    params = {"from": from_date, "to": to_date, "token": api_key}
-    async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.get(url, params=params)
-        data = response.json()
-    events = data.get("economicCalendar", [])
-    if country:
-        events = [e for e in events if e.get("country", "").upper() == country.upper()]
-    if importance:
-        events = [e for e in events if IMPACT_MAP.get(str(e.get("impact", "")).lower(), 0) >= importance]
+
     result = []
-    for e in events:
-        impact_level = IMPACT_MAP.get(str(e.get("impact", "low")).lower(), 0)
-        if impact_level >= 3:
-            impact_label = "HIGH"
-        elif impact_level >= 2:
-            impact_label = "MEDIUM"
-        else:
-            impact_label = "LOW"
+    for e in raw:
+        impact_level = IMPACT_MAP.get(str(e.get("impact", "")).lower(), 1)
+        if importance and impact_level < importance:
+            continue
+        if country and e.get("country", "").upper() != country.upper():
+            continue
+        date_part, _, time_part = e.get("date", "").partition("T")
+        if from_date and date_part < from_date:
+            continue
+        if to_date and date_part > to_date:
+            continue
         result.append({
-            "event": e.get("event", ""),
+            "event": e.get("title", ""),
             "country": e.get("country", ""),
-            "date": e.get("time", ""),
+            "date": date_part,
+            "time": time_part[:5] if time_part else "",
             "impact": impact_level,
-            "impact_label": impact_label,
-            "actual": e.get("actual"),
-            "estimate": e.get("estimate"),
-            "prev": e.get("prev"),
-            "unit": e.get("unit", ""),
+            "impact_label": IMPACT_LABELS.get(impact_level, "LOW"),
+            "actual": None,
+            "estimate": e.get("forecast") or None,
+            "prev": e.get("previous") or None,
+            "unit": "",
         })
-    result.sort(key=lambda x: x["date"])
+    result.sort(key=lambda x: (x["date"], x["time"]))
     return result
+
 
 async def get_high_impact_events(hours_ahead=4):
     if not settings.economic_calendar_enabled:
         return []
-    api_key = getattr(settings, "finnhub_api_key", None)
-    if not api_key:
+    try:
+        raw = await _fetch_feed()
+    except Exception:
         return []
-    now = datetime.utcnow()
-    from_date = now.strftime("%Y-%m-%d")
-    to_date = (now + timedelta(days=1)).strftime("%Y-%m-%d")
-    events = await get_economic_calendar(from_date, to_date, importance=3)
+
+    now = datetime.now(timezone.utc)
     upcoming = []
-    for e in events:
+    for e in raw:
+        if IMPACT_MAP.get(str(e.get("impact", "")).lower(), 1) < 3:
+            continue
         try:
-            event_time = datetime.fromisoformat(e["date"].replace("Z", ""))
+            event_time = datetime.fromisoformat(e.get("date", ""))
             diff = (event_time - now).total_seconds() / 3600
             if 0 <= diff <= hours_ahead:
-                e["hours_until"] = round(diff, 1)
-                upcoming.append(e)
+                upcoming.append({
+                    "event": e.get("title", ""),
+                    "country": e.get("country", ""),
+                    "hours_until": round(diff, 1),
+                })
         except (ValueError, TypeError):
             continue
     return upcoming
+
 
 async def should_trade():
     fng = None
