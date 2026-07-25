@@ -5,6 +5,7 @@ from typing import List
 from app.db.database import get_db
 from app.db.models.user import User
 from app.db.models.strategy import Strategy
+from app.db.models.signal import Signal
 from app.core.dependencies import get_current_user
 from app.schemas.strategy import StrategyCreate, StrategyUpdate, StrategyResponse
 from app.services.strategies.builtin import STRATEGY_MAP
@@ -89,6 +90,7 @@ def delete_strategy(
     strategy = db.query(Strategy).filter(Strategy.id == strategy_id, Strategy.user_id == current_user.id).first()
     if not strategy:
         raise HTTPException(status_code=404, detail="Strategie non trouvee")
+    db.query(Signal).filter(Signal.strategy_id == strategy_id).delete(synchronize_session=False)
     db.delete(strategy)
     db.commit()
     return {"detail": "Supprimee"}
