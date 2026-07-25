@@ -8,6 +8,7 @@ from app.services.risk.stop_loss import check_trade_exit
 from app.services.risk.trailing_stop import calculate_trailing_stop, calculate_partial_tp
 from app.services.notifications.telegram_notifier import notifier
 from app.services.strategies.indicators.atr import get_atr_pct
+from app.services.strategies.timeframe import resolve_timeframe
 from datetime import datetime, timezone
 import logging
 
@@ -85,7 +86,8 @@ async def bot_cycle():
                         if existing > 0:
                             continue
 
-                        candles = await exchange.get_ohlcv(strategy.symbol, strategy.timeframe, 100)
+                        timeframe = await resolve_timeframe(exchange, strategy)
+                        candles = await exchange.get_ohlcv(strategy.symbol, timeframe, 100)
                         closed_candles = candles[:-1]
                         signal = run_strategy(strategy.strategy_type, closed_candles, strategy.parameters)
 
@@ -112,7 +114,7 @@ async def bot_cycle():
                             params = strategy.parameters or {}
                             stop_loss_pct, take_profit_pct = resolve_risk_levels(closed_candles, strategy, params)
 
-                            logger.info(f"Signal {signal['action']} sur {current_price} ({strategy.name}) MA50={ma50:.2f} SL={stop_loss_pct:.4f} TP={take_profit_pct:.4f}")
+                            logger.info(f"Signal {signal['action']} sur {current_price} ({strategy.name}) TF={timeframe} MA50={ma50:.2f} SL={stop_loss_pct:.4f} TP={take_profit_pct:.4f}")
                             executor = PaperExecutor(db, strategy.user_id, capital=1000)
                             result = executor.open_trade(
                                 symbol=strategy.symbol,

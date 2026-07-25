@@ -8,7 +8,7 @@ class StrategyCreate(BaseModel):
     name: str
     strategy_type: str
     symbol: str
-    timeframe: str = "1h"
+    timeframe: str = "auto"
     parameters: Dict[str, Any] = {}
     risk_per_trade: float = 0.02
     stop_loss_pct: float = 0.01

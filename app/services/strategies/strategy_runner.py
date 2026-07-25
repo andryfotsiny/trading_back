@@ -5,12 +5,14 @@ from app.db.models.strategy import Strategy
 from app.db.models.signal import Signal
 from app.services.exchange.factory import create_exchange
 from app.services.strategies.signal_engine import run_strategy
+from app.services.strategies.timeframe import resolve_timeframe
 
 
 async def execute_strategy(db: Session, strategy: Strategy) -> Optional[Dict]:
     exchange = create_exchange()
     try:
-        candles = await exchange.get_ohlcv(strategy.symbol, strategy.timeframe, 100)
+        timeframe = await resolve_timeframe(exchange, strategy)
+        candles = await exchange.get_ohlcv(strategy.symbol, timeframe, 100)
     finally:
         await exchange.close()
 
