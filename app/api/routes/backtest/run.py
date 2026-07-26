@@ -8,6 +8,7 @@ from app.db.models.strategy import Strategy
 from app.db.models.backtest_result import BacktestResult
 from app.core.dependencies import get_current_user
 from app.services.backtest.engine import BacktestEngine
+from app.services.backtest.realistic_engine import RealisticBacktestEngine
 from app.services.backtest.data_loader import load_from_exchange
 from app.services.strategies.builtin import STRATEGY_MAP
 from app.services.strategies.timeframe import resolve_timeframe
@@ -29,6 +30,7 @@ async def run_backtest(
     risk_pct: float = Query(default=0.02),
     sl_pct: float = Query(default=0.01),
     tp_pct: float = Query(default=0.02),
+    realistic: bool = Query(default=False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -41,7 +43,8 @@ async def run_backtest(
     if len(candles) < 50:
         return {"error": "Pas assez de donnees (minimum 50 candles)"}
 
-    engine = BacktestEngine(
+    engine_cls = RealisticBacktestEngine if realistic else BacktestEngine
+    engine = engine_cls(
         strategy_type=strategy_type,
         initial_capital=capital,
         risk_per_trade=risk_pct,
@@ -69,7 +72,7 @@ async def run_backtest(
         total_pnl=result["total_pnl"],
         max_drawdown=result["max_drawdown"],
         sharpe_ratio=result.get("sharpe_ratio"),
-        parameters={"risk_pct": risk_pct, "sl_pct": sl_pct, "tp_pct": tp_pct},
+        parameters={"risk_pct": risk_pct, "sl_pct": sl_pct, "tp_pct": tp_pct, "mode": "realistic" if realistic else "classic"},
         trades_detail=result["trades_detail"],
     )
     db.add(bt)
@@ -82,8 +85,9 @@ async def run_backtest(
     return result
 
 
-def _save_backtest(db, user_id, strategy_type, symbol, timeframe, candles, capital, risk_pct, sl_pct, tp_pct, parameters):
-    engine = BacktestEngine(
+def _save_backtest(db, user_id, strategy_type, symbol, timeframe, candles, capital, risk_pct, sl_pct, tp_pct, parameters, realistic):
+    engine_cls = RealisticBacktestEngine if realistic else BacktestEngine
+    engine = engine_cls(
         strategy_type=strategy_type,
         initial_capital=capital,
         risk_per_trade=risk_pct,
@@ -112,14 +116,14 @@ def _save_backtest(db, user_id, strategy_type, symbol, timeframe, candles, capit
         total_pnl=result["total_pnl"],
         max_drawdown=result["max_drawdown"],
         sharpe_ratio=result.get("sharpe_ratio"),
-        parameters={"risk_pct": risk_pct, "sl_pct": sl_pct, "tp_pct": tp_pct},
+        parameters={"risk_pct": risk_pct, "sl_pct": sl_pct, "tp_pct": tp_pct, "mode": "realistic" if realistic else "classic"},
         trades_detail=result["trades_detail"],
     )
     db.add(bt)
     db.commit()
 
 
-async def run_all_backtests(user_id: int, symbol: str, limit: int, capital: float):
+async def run_all_backtests(user_id: int, symbol: str, limit: int, capital: float, realistic: bool):
     db = SessionLocal()
     try:
         strategies = db.query(Strategy).filter(
@@ -139,7 +143,7 @@ async def run_all_backtests(user_id: int, symbol: str, limit: int, capital: floa
                     _save_backtest(
                         db, user_id, strategy.strategy_type, symbol, timeframe, candles, capital,
                         strategy.risk_per_trade, strategy.stop_loss_pct, strategy.take_profit_pct,
-                        strategy.parameters,
+                        strategy.parameters, realistic,
                     )
                     logger.info(f"OK {strategy.name} ({timeframe})")
                 except Exception as e:
@@ -158,6 +162,7 @@ async def run_backtest_all(
     background_tasks: BackgroundTasks,
     limit: int = Query(default=500, le=1000),
     capital: float = Query(default=1000),
+    realistic: bool = Query(default=True),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -169,5 +174,5 @@ async def run_backtest_all(
     if not strategies:
         return {"error": "Aucune strategie active"}
 
-    background_tasks.add_task(run_all_backtests, current_user.id, symbol, limit, capital)
-    return {"status": "started", "symbol": symbol, "strategies_count": len(strategies)}
+    background_tasks.add_task(run_all_backtests, current_user.id, symbol, limit, capital, realistic)
+    return {"status": "started", "symbol": symbol, "strategies_count": len(strategies), "mode": "realistic" if realistic else "classic"}
