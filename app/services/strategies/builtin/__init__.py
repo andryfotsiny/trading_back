@@ -9,6 +9,7 @@ from app.services.strategies.builtin.rsi_macd_combo import RSIMACDComboStrategy
 from app.services.strategies.builtin.mtf_confluence import MTFConfluenceStrategy
 from app.services.strategies.builtin.bos_strategy import BOSStrategy
 from app.services.strategies.builtin.liquidity_sweep import LiquiditySweepStrategy
+from app.services.strategies.builtin.donchian_trend import DonchianTrendStrategy
 
 STRATEGY_MAP = {
     "rsi_oversold": RSIOversoldStrategy,
@@ -21,4 +22,5 @@ STRATEGY_MAP = {
     "mtf_confluence": MTFConfluenceStrategy,
     "bos_structure": BOSStrategy,
     "liquidity_sweep": LiquiditySweepStrategy,
+    "donchian_trend": DonchianTrendStrategy,
 }
