@@ -119,7 +119,7 @@ def _save_backtest(db, user_id, strategy_type, symbol, timeframe, candles, capit
     db.commit()
 
 
-async def run_all_backtests(user_id: int, symbol: str, limit: int, capital: float):
+async def run_all_backtests(user_id: int, limit: int, capital: float):
     db = SessionLocal()
     try:
         strategies = db.query(Strategy).filter(
@@ -132,16 +132,16 @@ async def run_all_backtests(user_id: int, symbol: str, limit: int, capital: floa
             for strategy in strategies:
                 try:
                     timeframe = await resolve_timeframe(exchange, strategy)
-                    candles = await load_from_exchange(symbol, timeframe, limit)
+                    candles = await load_from_exchange(strategy.symbol, timeframe, limit)
                     if len(candles) < 50:
                         logger.warning(f"Pas assez de candles pour {strategy.name} ({timeframe})")
                         continue
                     _save_backtest(
-                        db, user_id, strategy.strategy_type, symbol, timeframe, candles, capital,
+                        db, user_id, strategy.strategy_type, strategy.symbol, timeframe, candles, capital,
                         strategy.risk_per_trade, strategy.stop_loss_pct, strategy.take_profit_pct,
                         strategy.parameters,
                     )
-                    logger.info(f"OK {strategy.name} ({timeframe})")
+                    logger.info(f"OK {strategy.name} ({strategy.symbol}, {timeframe})")
                 except Exception as e:
                     logger.error(f"Erreur backtest {strategy.name}: {e}")
                     continue
@@ -151,17 +151,14 @@ async def run_all_backtests(user_id: int, symbol: str, limit: int, capital: floa
         db.close()
 
 
-@router.post("/run-all/{base}/{quote}")
+@router.post("/run-all")
 async def run_backtest_all(
-    base: str,
-    quote: str,
     background_tasks: BackgroundTasks,
     limit: int = Query(default=500, le=1000),
     capital: float = Query(default=1000),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    symbol = f"{base.upper()}/{quote.upper()}"
     strategies = db.query(Strategy).filter(
         Strategy.user_id == current_user.id,
         Strategy.is_active == True,
@@ -169,5 +166,5 @@ async def run_backtest_all(
     if not strategies:
         return {"error": "Aucune strategie active"}
 
-    background_tasks.add_task(run_all_backtests, current_user.id, symbol, limit, capital)
-    return {"status": "started", "symbol": symbol, "strategies_count": len(strategies)}
+    background_tasks.add_task(run_all_backtests, current_user.id, limit, capital)
+    return {"status": "started", "strategies_count": len(strategies)}
