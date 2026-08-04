@@ -36,3 +36,19 @@ def check_trade_exit(
             "pnl_per_unit": round(pnl, 8),
         }
     return None
+
+
+def check_trade_exit_range(
+    high: float,
+    low: float,
+    entry_price: float,
+    side: str,
+    stop_loss_price: float,
+    take_profit_price: float,
+) -> Optional[Dict]:
+    extreme_against = low if side == "BUY" else high
+    extreme_favor = high if side == "BUY" else low
+    exit_info = check_trade_exit(extreme_against, entry_price, side, stop_loss_price, take_profit_price)
+    if exit_info:
+        return exit_info
+    return check_trade_exit(extreme_favor, entry_price, side, stop_loss_price, take_profit_price)

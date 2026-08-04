@@ -4,7 +4,7 @@ from app.db.models.trade import Trade
 from app.services.exchange.factory import create_exchange
 from app.services.strategies.signal_engine import run_strategy
 from app.services.execution.paper_executor import PaperExecutor
-from app.services.risk.stop_loss import check_trade_exit
+from app.services.risk.stop_loss import check_trade_exit, check_trade_exit_range
 from app.services.risk.trailing_stop import calculate_trailing_stop, calculate_partial_tp
 from app.services.notifications.telegram_notifier import notifier
 from app.services.strategies.indicators.atr import get_atr_pct
@@ -188,9 +188,17 @@ async def bot_cycle():
                             db.commit()
                             logger.info(f"Partial TP: {trade.symbol} qty={close_qty:.6f}")
 
-                    exit_info = check_trade_exit(
-                        price, trade.entry_price, trade.side, trade.stop_loss, trade.take_profit
-                    )
+                    try:
+                        recent_candles = await exchange.get_ohlcv(trade.symbol, "1m", 10)
+                        recent_high = max(c["high"] for c in recent_candles)
+                        recent_low = min(c["low"] for c in recent_candles)
+                        exit_info = check_trade_exit_range(
+                            recent_high, recent_low, trade.entry_price, trade.side, trade.stop_loss, trade.take_profit
+                        )
+                    except Exception:
+                        exit_info = check_trade_exit(
+                            price, trade.entry_price, trade.side, trade.stop_loss, trade.take_profit
+                        )
                     if exit_info:
                         executor = PaperExecutor(db, trade.user_id)
                         result = executor.close_trade(trade.id, exit_info["exit_price"], exit_info["exit_reason"])
