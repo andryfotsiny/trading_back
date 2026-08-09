@@ -1,5 +1,5 @@
 # app/api/routes/dashboard.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.db.database import get_db
@@ -7,19 +7,35 @@ from app.db.models.user import User
 from app.db.models.trade import Trade
 from app.db.models.strategy import Strategy
 from app.core.dependencies import get_current_user
+from app.services.bot_runner import SCALP_TYPES
 
 router = APIRouter()
 
 
+def apply_scope(query, model, scope: str):
+    if scope == "scalp":
+        return query.filter(model.strategy_type.in_(SCALP_TYPES))
+    return query.filter(model.strategy_type.notin_(SCALP_TYPES))
+
+
 @router.get("/stats")
 def get_dashboard_stats(
+    scope: str = Query(default="swing"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    open_trades = db.query(Trade).filter(Trade.user_id == current_user.id, Trade.status == "open").count()
-    closed_trades = db.query(Trade).filter(Trade.user_id == current_user.id, Trade.status == "closed").all()
-    active_strategies = db.query(Strategy).filter(Strategy.user_id == current_user.id, Strategy.is_active == True).count()
-    total_strategies = db.query(Strategy).filter(Strategy.user_id == current_user.id).count()
+    open_trades = apply_scope(
+        db.query(Trade).filter(Trade.user_id == current_user.id, Trade.status == "open"), Trade, scope
+    ).count()
+    closed_trades = apply_scope(
+        db.query(Trade).filter(Trade.user_id == current_user.id, Trade.status == "closed"), Trade, scope
+    ).all()
+    active_strategies = apply_scope(
+        db.query(Strategy).filter(Strategy.user_id == current_user.id, Strategy.is_active == True), Strategy, scope
+    ).count()
+    total_strategies = apply_scope(
+        db.query(Strategy).filter(Strategy.user_id == current_user.id), Strategy, scope
+    ).count()
 
     total_pnl = sum(t.pnl or 0 for t in closed_trades)
     tp_trades = [t for t in closed_trades if (t.pnl or 0) > 0]
@@ -40,13 +56,17 @@ def get_dashboard_stats(
 
 @router.get("/strategy-stats")
 def get_strategy_stats(
+    scope: str = Query(default="swing"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    closed = db.query(Trade).filter(
-        Trade.user_id == current_user.id,
-        Trade.status == "closed",
-        Trade.strategy_name.isnot(None),
+    closed = apply_scope(
+        db.query(Trade).filter(
+            Trade.user_id == current_user.id,
+            Trade.status == "closed",
+            Trade.strategy_name.isnot(None),
+        ),
+        Trade, scope,
     ).all()
 
     stats = {}

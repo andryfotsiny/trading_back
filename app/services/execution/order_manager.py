@@ -2,13 +2,22 @@ from typing import List, Dict
 from sqlalchemy.orm import Session
 from app.db.models.trade import Trade
 from app.db.models.order import Order
+from app.services.bot_runner import SCALP_TYPES
 
 
-def get_open_trades(db: Session, user_id: int) -> List[Dict]:
-    trades = db.query(Trade).filter(
+def _apply_scope(query, scope: str):
+    if scope == "scalp":
+        return query.filter(Trade.strategy_type.in_(SCALP_TYPES))
+    if scope == "swing":
+        return query.filter(Trade.strategy_type.notin_(SCALP_TYPES))
+    return query
+
+
+def get_open_trades(db: Session, user_id: int, scope: str = "swing") -> List[Dict]:
+    trades = _apply_scope(db.query(Trade).filter(
         Trade.user_id == user_id,
         Trade.status == "open",
-    ).all()
+    ), scope).all()
     return [
         {
             "id": t.id,
@@ -27,11 +36,11 @@ def get_open_trades(db: Session, user_id: int) -> List[Dict]:
     ]
 
 
-def get_trade_history(db: Session, user_id: int, limit: int = 50) -> List[Dict]:
-    trades = db.query(Trade).filter(
+def get_trade_history(db: Session, user_id: int, limit: int = 50, scope: str = "swing") -> List[Dict]:
+    trades = _apply_scope(db.query(Trade).filter(
         Trade.user_id == user_id,
         Trade.status == "closed",
-    ).order_by(Trade.closed_at.desc()).limit(limit).all()
+    ), scope).order_by(Trade.closed_at.desc()).limit(limit).all()
     return [
         {
             "id": t.id,

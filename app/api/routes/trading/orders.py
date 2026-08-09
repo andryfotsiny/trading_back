@@ -95,19 +95,21 @@ async def check_exits(
 
 @router.get("/open-trades")
 def list_open_trades(
+    scope: str = Query(default="swing"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return get_open_trades(db, current_user.id)
+    return get_open_trades(db, current_user.id, scope)
 
 
 @router.get("/history")
 def trade_history(
     limit: int = Query(default=50, le=200),
+    scope: str = Query(default="swing"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return get_trade_history(db, current_user.id, limit)
+    return get_trade_history(db, current_user.id, limit, scope)
 
 
 @router.get("/orders/{trade_id}")
