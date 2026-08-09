@@ -21,6 +21,7 @@ from app.api.routes.bot import router as bot_router
 from app.api.routes.dashboard import router as dashboard_router
 from app.core.scheduler import scheduler
 from app.services.bot_runner import bot_cycle
+from app.services.scalp_runner import scalp_cycle
 import logging
 from app.api.routes.calendar import router as calendar_router
 
@@ -31,8 +32,9 @@ logger = logging.getLogger("trading_bot")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler.add_job(bot_cycle, "interval", minutes=5, id="bot_cycle", replace_existing=True)
+    scheduler.add_job(scalp_cycle, "interval", minutes=1, id="scalp_cycle", replace_existing=True)
     scheduler.start()
-    logger.info("Bot demarre - cycle toutes les 5 minutes")
+    logger.info("Bot demarre - cycle principal 5 min, cycle scalp 1 min")
     yield
     scheduler.shutdown()
     logger.info("Bot arrete")

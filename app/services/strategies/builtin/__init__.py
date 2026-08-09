@@ -10,6 +10,7 @@ from app.services.strategies.builtin.mtf_confluence import MTFConfluenceStrategy
 from app.services.strategies.builtin.bos_strategy import BOSStrategy
 from app.services.strategies.builtin.liquidity_sweep import LiquiditySweepStrategy
 from app.services.strategies.builtin.donchian_trend import DonchianTrendStrategy
+from app.services.strategies.builtin.scalp_momentum import ScalpMomentumStrategy
 
 STRATEGY_MAP = {
     "rsi_oversold": RSIOversoldStrategy,
@@ -23,4 +24,5 @@ STRATEGY_MAP = {
     "bos_structure": BOSStrategy,
     "liquidity_sweep": LiquiditySweepStrategy,
     "donchian_trend": DonchianTrendStrategy,
+    "scalp_momentum": ScalpMomentumStrategy,
 }

@@ -19,8 +19,18 @@ MAX_SL_PCT = 0.05
 MIN_TP_PCT = 0.0075
 MAX_TP_PCT = 0.10
 
+SCALP_TYPES = ["scalp_momentum"]
 
-def resolve_risk_levels(candles: list, strategy, params: dict) -> tuple:
+
+def resolve_risk_levels(
+    candles: list,
+    strategy,
+    params: dict,
+    min_sl_pct: float = MIN_SL_PCT,
+    max_sl_pct: float = MAX_SL_PCT,
+    min_tp_pct: float = MIN_TP_PCT,
+    max_tp_pct: float = MAX_TP_PCT,
+) -> tuple:
     if not params.get("use_atr_risk", True):
         return strategy.stop_loss_pct, strategy.take_profit_pct
 
@@ -28,8 +38,8 @@ def resolve_risk_levels(candles: list, strategy, params: dict) -> tuple:
     if not atr_pct:
         return strategy.stop_loss_pct, strategy.take_profit_pct
 
-    sl = min(max(atr_pct * params.get("atr_sl_mult", 2.0), MIN_SL_PCT), MAX_SL_PCT)
-    tp = min(max(atr_pct * params.get("atr_tp_mult", 3.0), MIN_TP_PCT), MAX_TP_PCT)
+    sl = min(max(atr_pct * params.get("atr_sl_mult", 2.0), min_sl_pct), max_sl_pct)
+    tp = min(max(atr_pct * params.get("atr_tp_mult", 3.0), min_tp_pct), max_tp_pct)
     return round(sl, 6), round(tp, 6)
 
 
@@ -69,7 +79,10 @@ async def bot_cycle():
     try:
         can_trade, market_info = await check_market_conditions()
 
-        strategies = db.query(Strategy).filter(Strategy.is_active == True).all()
+        strategies = db.query(Strategy).filter(
+            Strategy.is_active == True,
+            Strategy.strategy_type.notin_(SCALP_TYPES),
+        ).all()
         if not strategies:
             return
 
@@ -144,7 +157,10 @@ async def bot_cycle():
 
             strategies_by_name = {s.name: s for s in strategies}
 
-            open_trades = db.query(Trade).filter(Trade.status == "open").all()
+            open_trades = db.query(Trade).filter(
+                Trade.status == "open",
+                Trade.strategy_type.notin_(SCALP_TYPES),
+            ).all()
             for trade in open_trades:
                 try:
                     ticker = await exchange.get_ticker(trade.symbol)
