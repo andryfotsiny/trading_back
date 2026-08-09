@@ -12,10 +12,18 @@ from app.services.backtest.data_loader import load_from_exchange
 from app.services.strategies.builtin import STRATEGY_MAP
 from app.services.strategies.timeframe import resolve_timeframe
 from app.services.exchange.factory import create_exchange
+from app.services.bot_runner import SCALP_TYPES
 import logging
 
 router = APIRouter()
 logger = logging.getLogger("backtest_route")
+
+
+async def _resolve_backtest_timeframe(exchange, strategy):
+    if strategy.strategy_type in SCALP_TYPES:
+        params = strategy.parameters or {}
+        return params.get("scalp_timeframe", "1m")
+    return await resolve_timeframe(exchange, strategy)
 
 
 @router.post("/run/{strategy_type}/{base}/{quote}")
@@ -119,19 +127,24 @@ def _save_backtest(db, user_id, strategy_type, symbol, timeframe, candles, capit
     db.commit()
 
 
-async def run_all_backtests(user_id: int, limit: int, capital: float):
+async def run_all_backtests(user_id: int, limit: int, capital: float, scope: str = "swing"):
     db = SessionLocal()
     try:
-        strategies = db.query(Strategy).filter(
+        query = db.query(Strategy).filter(
             Strategy.user_id == user_id,
             Strategy.is_active == True,
-        ).all()
+        )
+        if scope == "scalp":
+            query = query.filter(Strategy.strategy_type.in_(SCALP_TYPES))
+        else:
+            query = query.filter(Strategy.strategy_type.notin_(SCALP_TYPES))
+        strategies = query.all()
 
         exchange = create_exchange()
         try:
             for strategy in strategies:
                 try:
-                    timeframe = await resolve_timeframe(exchange, strategy)
+                    timeframe = await _resolve_backtest_timeframe(exchange, strategy)
                     candles = await load_from_exchange(strategy.symbol, timeframe, limit)
                     if len(candles) < 50:
                         logger.warning(f"Pas assez de candles pour {strategy.name} ({timeframe})")
@@ -156,15 +169,21 @@ async def run_backtest_all(
     background_tasks: BackgroundTasks,
     limit: int = Query(default=500, le=1000),
     capital: float = Query(default=1000),
+    scope: str = Query(default="swing"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    strategies = db.query(Strategy).filter(
+    query = db.query(Strategy).filter(
         Strategy.user_id == current_user.id,
         Strategy.is_active == True,
-    ).all()
+    )
+    if scope == "scalp":
+        query = query.filter(Strategy.strategy_type.in_(SCALP_TYPES))
+    else:
+        query = query.filter(Strategy.strategy_type.notin_(SCALP_TYPES))
+    strategies = query.all()
     if not strategies:
         return {"error": "Aucune strategie active"}
 
-    background_tasks.add_task(run_all_backtests, current_user.id, limit, capital)
+    background_tasks.add_task(run_all_backtests, current_user.id, limit, capital, scope)
     return {"status": "started", "strategies_count": len(strategies)}

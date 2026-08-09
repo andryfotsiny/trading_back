@@ -1,21 +1,29 @@
 # app/api/routes/backtest/results.py
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db.models.user import User
 from app.db.models.backtest_result import BacktestResult
 from app.core.dependencies import get_current_user
+from app.services.bot_runner import SCALP_TYPES
 
 router = APIRouter()
 
 
+def apply_scope(query, scope: str):
+    if scope == "scalp":
+        return query.filter(BacktestResult.strategy_type.in_(SCALP_TYPES))
+    return query.filter(BacktestResult.strategy_type.notin_(SCALP_TYPES))
+
+
 @router.get("/")
 def list_backtests(
+    scope: str = Query(default="swing"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    results = db.query(BacktestResult).filter(
-        BacktestResult.user_id == current_user.id
+    results = apply_scope(
+        db.query(BacktestResult).filter(BacktestResult.user_id == current_user.id), scope
     ).order_by(BacktestResult.created_at.desc()).all()
     return [
         {
