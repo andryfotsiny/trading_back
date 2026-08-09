@@ -40,6 +40,19 @@ class DonchianTrendStrategy(BaseStrategy):
         if not action:
             return None
 
+        min_taker_buy_ratio = self.parameters.get("min_taker_buy_ratio")
+        taker_buy_ratio = None
+        if min_taker_buy_ratio is not None:
+            last_candle = candles[-1]
+            volume = last_candle.get("volume")
+            taker_buy_volume = last_candle.get("taker_buy_volume")
+            if volume and taker_buy_volume is not None:
+                taker_buy_ratio = taker_buy_volume / volume
+                if action == "BUY" and taker_buy_ratio < min_taker_buy_ratio:
+                    return None
+                if action == "SELL" and taker_buy_ratio > (1 - min_taker_buy_ratio):
+                    return None
+
         confidence = round(min((adx - adx_threshold) / 50, 1.0), 2)
 
         return {
@@ -53,5 +66,6 @@ class DonchianTrendStrategy(BaseStrategy):
                 "adx": adx,
                 "plus_di": adx_result["plus_di"],
                 "minus_di": adx_result["minus_di"],
+                "taker_buy_ratio": round(taker_buy_ratio, 4) if taker_buy_ratio is not None else None,
             },
         }

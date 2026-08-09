@@ -42,17 +42,22 @@ class BinanceClient(BaseExchange):
         }
 
     async def get_ohlcv(self, symbol: str, timeframe: str = "1h", limit: int = 100) -> List:
-        candles = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+        raw = await self.exchange.publicGetKlines({
+            "symbol": symbol.replace("/", ""),
+            "interval": timeframe,
+            "limit": limit,
+        })
         return [
             {
                 "timestamp": c[0],
-                "open": c[1],
-                "high": c[2],
-                "low": c[3],
-                "close": c[4],
-                "volume": c[5],
+                "open": float(c[1]),
+                "high": float(c[2]),
+                "low": float(c[3]),
+                "close": float(c[4]),
+                "volume": float(c[5]),
+                "taker_buy_volume": float(c[9]),
             }
-            for c in candles
+            for c in raw
         ]
 
     async def create_order(self, symbol: str, side: str, order_type: str, quantity: float, price: Optional[float] = None) -> Dict:
