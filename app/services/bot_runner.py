@@ -64,12 +64,12 @@ def calculate_ma50(candles: list) -> float:
     return sum(closes) / 50
 
 
-def is_trend_favorable(signal_action: str, current_price: float, ma50: float) -> bool:
+def is_trend_favorable(signal_action: str, current_price: float, ma50: float, margin_pct: float = 0.0) -> bool:
     if ma50 is None:
         return True
-    if signal_action == "BUY" and current_price < ma50:
+    if signal_action == "BUY" and current_price < ma50 * (1 - margin_pct):
         return False
-    if signal_action == "SELL" and current_price > ma50:
+    if signal_action == "SELL" and current_price > ma50 * (1 + margin_pct):
         return False
     return True
 
@@ -119,12 +119,13 @@ async def bot_cycle():
                             ticker = await exchange.get_ticker(strategy.symbol)
                             current_price = ticker["last"]
                             ma50 = calculate_ma50(closed_candles)
+                            params = strategy.parameters or {}
+                            ma50_margin_pct = params.get("ma50_margin_pct", 0.0)
 
-                            if not is_trend_favorable(signal["action"], current_price, ma50):
-                                logger.info(f"Filtre MA50 ({ma50:.2f}): signal {signal['action']} ignore pour {strategy.name}")
+                            if not is_trend_favorable(signal["action"], current_price, ma50, ma50_margin_pct):
+                                logger.info(f"Filtre MA50 ({ma50:.2f}, marge={ma50_margin_pct:.3f}): signal {signal['action']} ignore pour {strategy.name}")
                                 continue
 
-                            params = strategy.parameters or {}
                             stop_loss_pct, take_profit_pct = resolve_risk_levels(closed_candles, strategy, params)
 
                             logger.info(f"Signal {signal['action']} sur {current_price} ({strategy.name}) TF={timeframe} MA50={ma50:.2f} SL={stop_loss_pct:.4f} TP={take_profit_pct:.4f}")

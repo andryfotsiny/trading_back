@@ -44,7 +44,8 @@ class RealisticBacktestEngine:
                 continue
 
             ma50 = calculate_ma50(window)
-            if not is_trend_favorable(signal["action"], price, ma50):
+            ma50_margin_pct = self.parameters.get("ma50_margin_pct", 0.0)
+            if not is_trend_favorable(signal["action"], price, ma50, ma50_margin_pct):
                 continue
 
             self._open_position(signal, current, window)
