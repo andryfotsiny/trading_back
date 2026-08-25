@@ -22,6 +22,7 @@ from app.api.routes.dashboard import router as dashboard_router
 from app.core.scheduler import scheduler
 from app.services.bot_runner import bot_cycle
 from app.services.scalp_runner import scalp_cycle
+from app.services.exchange.binance_client import close_all_exchanges
 import logging
 from app.api.routes.calendar import router as calendar_router
 
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI):
     logger.info("Bot demarre - cycle principal 5 min, cycle scalp 1 min")
     yield
     scheduler.shutdown()
+    await close_all_exchanges()
     logger.info("Bot arrete")
 
 

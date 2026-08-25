@@ -3,22 +3,34 @@ import ccxt.async_support as ccxt
 from typing import List, Dict, Optional
 from app.services.exchange.base import BaseExchange
 
+# Une instance ccxt par (cle, testnet) est partagee entre toutes les requetes:
+# en creer une neuve a chaque appel forcait une nouvelle connexion TLS a
+# Binance a chaque fois (2-3s), ce qui rendait les requetes lentes assez
+# souvent annulees en plein vol par le frontend (resets cote nginx).
+_exchange_cache: Dict[tuple, "ccxt.binance"] = {}
+
 
 class BinanceClient(BaseExchange):
 
     def __init__(self, api_key: str, api_secret: str, testnet: bool = True):
-        self.exchange = ccxt.binance({
-            "apiKey": api_key,
-            "secret": api_secret,
-            "enableRateLimit": True,
-            "timeout": 30000,
-            "options": {"defaultType": "spot"},
-        })
-        if testnet:
-            self.exchange.set_sandbox_mode(True)
+        cache_key = (api_key, testnet)
+        if cache_key not in _exchange_cache:
+            instance = ccxt.binance({
+                "apiKey": api_key,
+                "secret": api_secret,
+                "enableRateLimit": True,
+                "timeout": 30000,
+                "options": {"defaultType": "spot"},
+            })
+            if testnet:
+                instance.set_sandbox_mode(True)
+            _exchange_cache[cache_key] = instance
+        self.exchange = _exchange_cache[cache_key]
 
     async def close(self):
-        await self.exchange.close()
+        # Instance partagee et longue duree: ne pas fermer la connexion
+        # sous les autres requetes en cours. Fermee au shutdown de l'app.
+        pass
 
     async def get_balance(self) -> Dict:
         balance = await self.exchange.fetch_balance()
@@ -106,3 +118,9 @@ class BinanceClient(BaseExchange):
             "price": order["price"],
             "status": order["status"],
         }
+
+
+async def close_all_exchanges():
+    for instance in _exchange_cache.values():
+        await instance.close()
+    _exchange_cache.clear()
