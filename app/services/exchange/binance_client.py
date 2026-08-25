@@ -29,16 +29,18 @@ class BinanceClient(BaseExchange):
         }
 
     async def get_ticker(self, symbol: str) -> Dict:
-        ticker = await self.exchange.fetch_ticker(symbol)
+        raw = await self.exchange.publicGetTicker24hr({
+            "symbol": symbol.replace("/", ""),
+        })
         return {
-            "symbol": ticker["symbol"],
-            "last": ticker["last"],
-            "bid": ticker["bid"],
-            "ask": ticker["ask"],
-            "high": ticker["high"],
-            "low": ticker["low"],
-            "volume": ticker["baseVolume"],
-            "timestamp": ticker["timestamp"],
+            "symbol": symbol,
+            "last": float(raw["lastPrice"]),
+            "bid": float(raw["bidPrice"]),
+            "ask": float(raw["askPrice"]),
+            "high": float(raw["highPrice"]),
+            "low": float(raw["lowPrice"]),
+            "volume": float(raw["volume"]),
+            "timestamp": int(raw["closeTime"]),
         }
 
     async def get_ohlcv(self, symbol: str, timeframe: str = "1h", limit: int = 100) -> List:
