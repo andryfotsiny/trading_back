@@ -48,6 +48,7 @@ class PaperExecutor:
             entry_price=entry_price,
             quantity=prep["quantity"],
             stop_loss=prep["stop_loss"],
+            stop_loss_initial=prep["stop_loss"],
             take_profit=prep["take_profit"],
             status="open",
             strategy_name=strategy_name,
@@ -118,6 +119,7 @@ class PaperExecutor:
         trade.pnl = round(pnl, 4)
         trade.pnl_pct = round(pnl_pct, 2)
         trade.status = "closed"
+        trade.exit_reason = reason
         trade.closed_at = datetime.now(timezone.utc)
 
         order = Order(

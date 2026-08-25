@@ -82,7 +82,7 @@ class RealisticBacktestEngine:
     def _update_position(self, price: float, candle: Dict):
         pos = self.position
         trailing_pct = self.parameters.get("trailing_pct", 0.02)
-        activation_pct = self.parameters.get("trailing_activation_pct", pos["risk_pct"])
+        activation_pct = self.parameters.get("trailing_activation_pct", pos["risk_pct"] * 1.5)
         trailing = calculate_trailing_stop(
             pos["side"], pos["entry_price"], price, pos["stop_loss"], trailing_pct, activation_pct
         )

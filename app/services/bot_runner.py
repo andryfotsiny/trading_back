@@ -76,6 +76,7 @@ def is_trend_favorable(signal_action: str, current_price: float, ma50: float, ma
 
 async def bot_cycle():
     db = SessionLocal()
+    cycle_start = datetime.now(timezone.utc)
     try:
         can_trade, market_info = await check_market_conditions()
 
@@ -158,9 +159,12 @@ async def bot_cycle():
 
             strategies_by_name = {s.name: s for s in strategies}
 
+            # Exclut les trades ouverts pendant ce cycle: leur fenetre de prix
+            # contiendrait des bougies anterieures a l'entree.
             open_trades = db.query(Trade).filter(
                 Trade.status == "open",
                 Trade.strategy_type.notin_(SCALP_TYPES),
+                Trade.opened_at < cycle_start,
             ).all()
             for trade in open_trades:
                 try:
@@ -175,7 +179,7 @@ async def bot_cycle():
                         if trade.entry_price and trade.stop_loss
                         else 0.01
                     )
-                    activation_pct = params.get("trailing_activation_pct", risk_pct)
+                    activation_pct = params.get("trailing_activation_pct", risk_pct * 1.5)
 
                     trailing = calculate_trailing_stop(
                         trade.side,
@@ -207,6 +211,12 @@ async def bot_cycle():
 
                     try:
                         recent_candles = await exchange.get_ohlcv(trade.symbol, "1m", 10)
+                        # Ne garder que les bougies posterieures a l'entree, sinon un
+                        # extreme d'avant l'ouverture declenche le SL retroactivement.
+                        opened_ms = trade.opened_at.timestamp() * 1000
+                        recent_candles = [c for c in recent_candles if c["timestamp"] >= opened_ms]
+                        if not recent_candles:
+                            raise ValueError("aucune bougie posterieure a l'entree")
                         recent_high = max(c["high"] for c in recent_candles)
                         recent_low = min(c["low"] for c in recent_candles)
                         exit_info = check_trade_exit_range(

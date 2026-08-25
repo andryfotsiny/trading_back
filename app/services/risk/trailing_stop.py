@@ -8,17 +8,22 @@ def calculate_trailing_stop(
     current_sl: float,
     trailing_pct: float = 0.02,
     activation_pct: float = 0.01,
+    fee_rate: float = 0.001,
 ) -> dict:
+    # Plancher au breakeven reel: l'entree seule laisserait une perte seche
+    # egale au cout aller-retour.
+    round_trip = 2 * fee_rate
+
     if side == "BUY":
         if current_price < entry_price * (1 + activation_pct):
             return {"new_sl": current_sl, "updated": False}
-        new_sl = max(current_price * (1 - trailing_pct), entry_price)
+        new_sl = max(current_price * (1 - trailing_pct), entry_price * (1 + round_trip))
         if new_sl > current_sl:
             return {"new_sl": round(new_sl, 6), "updated": True}
     elif side == "SELL":
         if current_price > entry_price * (1 - activation_pct):
             return {"new_sl": current_sl, "updated": False}
-        new_sl = min(current_price * (1 + trailing_pct), entry_price)
+        new_sl = min(current_price * (1 + trailing_pct), entry_price * (1 - round_trip))
         if new_sl < current_sl:
             return {"new_sl": round(new_sl, 6), "updated": True}
 

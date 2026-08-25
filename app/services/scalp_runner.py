@@ -20,6 +20,7 @@ SCALP_MAX_TP_PCT = 0.02
 
 async def scalp_cycle():
     db = SessionLocal()
+    cycle_start = datetime.now(timezone.utc)
     try:
         strategies = db.query(Strategy).filter(
             Strategy.is_active == True,
@@ -89,6 +90,7 @@ async def scalp_cycle():
             open_trades = db.query(Trade).filter(
                 Trade.status == "open",
                 Trade.strategy_type.in_(SCALP_TYPES),
+                Trade.opened_at < cycle_start,
             ).all()
             for trade in open_trades:
                 try:
@@ -120,6 +122,10 @@ async def scalp_cycle():
 
                     try:
                         recent_candles = await exchange.get_ohlcv(trade.symbol, "1m", 5)
+                        opened_ms = trade.opened_at.timestamp() * 1000
+                        recent_candles = [c for c in recent_candles if c["timestamp"] >= opened_ms]
+                        if not recent_candles:
+                            raise ValueError("aucune bougie posterieure a l'entree")
                         recent_high = max(c["high"] for c in recent_candles)
                         recent_low = min(c["low"] for c in recent_candles)
                         exit_info = check_trade_exit_range(
