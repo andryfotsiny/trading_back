@@ -3,7 +3,13 @@ from app.services.strategies.signal_engine import run_strategy
 from app.services.risk.position_sizer import calculate_position_size, calculate_stop_loss, calculate_take_profit
 from app.services.risk.trailing_stop import calculate_trailing_stop
 from app.services.backtest.performance import calculate_performance
-from app.services.bot_runner import calculate_ma50, is_trend_favorable, resolve_risk_levels
+from app.services.bot_runner import (
+    calculate_ma50,
+    is_trend_favorable,
+    is_market_regime_favorable,
+    resolve_risk_levels,
+    MIN_ADX_ENTRY,
+)
 
 
 class RealisticBacktestEngine:
@@ -46,6 +52,10 @@ class RealisticBacktestEngine:
             ma50 = calculate_ma50(window)
             ma50_margin_pct = self.parameters.get("ma50_margin_pct", 0.0)
             if not is_trend_favorable(signal["action"], price, ma50, ma50_margin_pct):
+                continue
+
+            min_adx = self.parameters.get("min_adx_entry", MIN_ADX_ENTRY)
+            if not is_market_regime_favorable(window, min_adx):
                 continue
 
             self._open_position(signal, current, window)

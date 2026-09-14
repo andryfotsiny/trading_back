@@ -8,6 +8,7 @@ from app.services.risk.stop_loss import check_trade_exit, check_trade_exit_range
 from app.services.risk.trailing_stop import calculate_trailing_stop, calculate_partial_tp
 from app.services.notifications.telegram_notifier import notifier
 from app.services.strategies.indicators.atr import get_atr_pct
+from app.services.strategies.indicators.adx import get_latest_adx
 from app.services.strategies.timeframe import resolve_timeframe
 from datetime import datetime, timezone
 import logging
@@ -20,6 +21,12 @@ MIN_TP_PCT = 0.0075
 MAX_TP_PCT = 0.10
 
 SCALP_TYPES = ["scalp_momentum"]
+
+# Calibre le 14/09 sur 18 trades reels (17->25 aout, post-fix MA50): un ADX
+# a l'entree < 25 correspond aux trades ouverts en marche plat (range), qui
+# concentrent la majorite des pertes. Reduit la casse sans l'eliminer: les
+# strategies restent perdantes meme en tendance confirmee sur cet echantillon.
+MIN_ADX_ENTRY = 25
 
 
 def resolve_risk_levels(
@@ -74,6 +81,15 @@ def is_trend_favorable(signal_action: str, current_price: float, ma50: float, ma
     return True
 
 
+def is_market_regime_favorable(candles: list, min_adx: float = MIN_ADX_ENTRY) -> bool:
+    if min_adx <= 0:
+        return True
+    adx = get_latest_adx(candles, 14)
+    if adx is None:
+        return True
+    return adx >= min_adx
+
+
 async def bot_cycle():
     db = SessionLocal()
     cycle_start = datetime.now(timezone.utc)
@@ -125,6 +141,11 @@ async def bot_cycle():
 
                             if not is_trend_favorable(signal["action"], current_price, ma50, ma50_margin_pct):
                                 logger.info(f"Filtre MA50 ({ma50:.2f}, marge={ma50_margin_pct:.3f}): signal {signal['action']} ignore pour {strategy.name}")
+                                continue
+
+                            min_adx = params.get("min_adx_entry", MIN_ADX_ENTRY)
+                            if not is_market_regime_favorable(closed_candles, min_adx):
+                                logger.info(f"Filtre ADX (seuil={min_adx}): signal {signal['action']} ignore pour {strategy.name}")
                                 continue
 
                             stop_loss_pct, take_profit_pct = resolve_risk_levels(closed_candles, strategy, params)
