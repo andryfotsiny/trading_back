@@ -11,6 +11,7 @@ from app.services.strategies.builtin.bos_strategy import BOSStrategy
 from app.services.strategies.builtin.liquidity_sweep import LiquiditySweepStrategy
 from app.services.strategies.builtin.donchian_trend import DonchianTrendStrategy
 from app.services.strategies.builtin.scalp_momentum import ScalpMomentumStrategy
+from app.services.strategies.builtin.scalp_reversion import ScalpReversionStrategy
 
 STRATEGY_MAP = {
     "rsi_oversold": RSIOversoldStrategy,
@@ -25,4 +26,5 @@ STRATEGY_MAP = {
     "liquidity_sweep": LiquiditySweepStrategy,
     "donchian_trend": DonchianTrendStrategy,
     "scalp_momentum": ScalpMomentumStrategy,
+    "scalp_reversion": ScalpReversionStrategy,
 }

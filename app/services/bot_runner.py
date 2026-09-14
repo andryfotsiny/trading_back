@@ -20,7 +20,7 @@ MAX_SL_PCT = 0.05
 MIN_TP_PCT = 0.0075
 MAX_TP_PCT = 0.10
 
-SCALP_TYPES = ["scalp_momentum"]
+SCALP_TYPES = ["scalp_momentum", "scalp_reversion"]
 
 # Calibre le 14/09 sur 18 trades reels (17->25 aout, post-fix MA50): un ADX
 # a l'entree < 25 correspond aux trades ouverts en marche plat (range), qui
