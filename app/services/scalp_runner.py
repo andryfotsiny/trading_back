@@ -105,7 +105,7 @@ async def scalp_cycle():
                         if trade.entry_price and trade.stop_loss
                         else 0.002
                     )
-                    activation_pct = params.get("trailing_activation_pct", risk_pct)
+                    activation_pct = params.get("trailing_activation_pct", risk_pct * 1.5)
 
                     trailing = calculate_trailing_stop(
                         trade.side,
