@@ -10,6 +10,7 @@ from app.services.bot_runner import (
     resolve_risk_levels,
     MIN_ADX_ENTRY,
 )
+from app.services.execution.paper_executor import FEE_RATE
 
 
 class RealisticBacktestEngine:
@@ -122,9 +123,11 @@ class RealisticBacktestEngine:
     def _close_position(self, exit_price: float, reason: str):
         pos = self.position
         if pos["side"] == "BUY":
-            pnl = (exit_price - pos["entry_price"]) * pos["quantity"]
+            gross = (exit_price - pos["entry_price"]) * pos["quantity"]
         else:
-            pnl = (pos["entry_price"] - exit_price) * pos["quantity"]
+            gross = (pos["entry_price"] - exit_price) * pos["quantity"]
+        fees = (pos["entry_price"] + exit_price) * pos["quantity"] * FEE_RATE
+        pnl = gross - fees
         notional = pos["entry_price"] * pos["quantity"]
         pnl_pct = (pnl / notional * 100) if notional else 0
 
@@ -136,6 +139,7 @@ class RealisticBacktestEngine:
             "quantity": pos["quantity"],
             "pnl": round(pnl, 4),
             "pnl_pct": round(pnl_pct, 2),
+            "fees": round(fees, 4),
             "reason": reason,
         })
         self.position = None
