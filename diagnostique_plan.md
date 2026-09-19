@@ -160,18 +160,43 @@ Fichier : `app/services/bot_runner.py`
 
 ---
 
-## 8. Points restants (non traités)
+## 8. Garde-fous avant passage au réel — FAITS (commits 4b90d46, 999bdd6)
+
+### Fix #9 — `can_open_trade()` : vraies limites paper/réel — `risk_manager.py`
+- Flag `enforce_risk_limits` : en paper (`False`) le comportement reste permissif ; en réel (`True`) `can_open_trade()` bloque sur `max_open_trades` et `max_drawdown` avec un motif explicite.
+- `OrderExecutor` (réel) passe `enforce_risk_limits=True` et calcule le capital sur le **solde USDT réel** du compte (`get_balance`) au lieu de 1000 codé en dur.
+- `PaperExecutor` reste permissif.
+
+### Fix #10 — Finnhub 403 : calendrier économique optionnel — `config.py`, `economic_calendar.py`
+- L'endpoint `/calendar/economic` est premium → 403 en plan gratuit. Ce n'était pas une clé expirée.
+- Flag `economic_calendar_enabled` (`False` par défaut) : plus aucun appel 403 à chaque cycle. Le Fear & Greed (alternative.me) reste actif.
+
+### Fix #11 — `deploy.sh` : échec réellement signalé — `deploy.sh`
+- Le script local affichait « succès » sans tester le code retour SSH. Désormais : health check backend (`curl localhost:8000`, 12 tentatives/60s), capture du code retour, bannière conditionnelle verte/rouge, `exit` propagé.
+- Validé sur un échec réel (blocage `.env.prod`) le 2026-07-24.
+
+### Fix #12 — `.env.prod` cesse d'être suivi — `.gitignore` déjà présent, `git rm --cached`
+- `.env.prod` (secrets) était dans `.gitignore` mais resté suivi car committé avant. Toute rotation de mot de passe sur le serveur bloquait `git pull` et faisait échouer le deploy.
+- Désuivi, fichier conservé sur disque. **Note** : les secrets restent dans l'historique git → rotation recommandée.
+
+### Fix #13 — Nettoyage + normalisation `side`
+- `trailing_stop_loss()` (code mort) supprimé de `stop_loss.py`.
+- `normalize_side()` impose BUY/SELL majuscules et rejette les valeurs invalides, appliqué à l'entrée des deux exécuteurs.
+
+### dca_bot — décision : GARDÉE ACTIVE
+- BUY-only est le principe même du DCA ; le filtre MA50 bloque déjà ses entrées en downtrend.
+- Le -225.64 vient de l'ancien moteur cassé. Décision fondée sur données : réévaluer après 48h avec les fixes en place, désactiver alors si toujours pire contributeur.
+
+---
+
+## 9. Points restants (non traités)
 
 | Sujet | Nature | Gravité |
 |---|---|---|
-| Finnhub 403 à chaque cycle | Token invalide → exception avalée par `check_market_conditions()` → `can_trade=True` par défaut. Le filtre calendrier économique est inopérant. | Moyenne |
-| `can_open_trade()` retourne toujours `allowed: True` | Aucune protection drawdown, `max_open_trades` calculé mais jamais appliqué. Volontaire en paper, dangereux avant le réel. | Élevée avant passage au réel |
-| `deploy.sh` annonce un succès en cas d'échec | Constaté le 2026-07-24 : `no such service: backend` suivi de « Deploy terminé avec succès ». Pas de `set -e` ni de test des codes retour. | Moyenne |
-| `dca_bot` BUY-only | Pire contributeur : 13 trades, 0 gain, -225.64. Décision d'exploitation. | Moyenne |
-| `trailing_stop_loss()` dans `stop_loss.py` | Code mort, jamais appelé. | Faible |
+| Secrets dans l'historique git | `.env.prod` désuivi mais présent dans l'historique. Rotation des credentials recommandée. | Moyenne |
 | Partial TP | Désactivé. Réimplémentation propre = migration Alembic pour mémoriser le palier exécuté. | Faible |
-| `side` non normalisé | Trade #31 avait `side='buy'` en minuscules, ne matchant aucun `== "BUY"` du code. | Faible |
-| `exit_price` = prix du SL théorique | `check_trade_exit()` renvoie le prix du stop, pas le prix réel. Avec un échantillonnage 5 min, un gap réel serait ignoré → résultats optimistes. | Faible en paper |
+| `exit_price` = prix du SL théorique | `check_trade_exit()` renvoie le prix du stop, pas le prix réel. Un gap réel serait ignoré → résultats optimistes. | Faible en paper |
+| `ipRestrict = False` sur la clé Binance | La clé marche depuis n'importe quelle IP. À restreindre à l'IP du VPS avant le réel. | Élevée avant passage au réel |
 
 ---
 
